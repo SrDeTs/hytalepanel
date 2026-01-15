@@ -1,117 +1,133 @@
 name: Build and Push Docker Image
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "Dockerfile"
-            - "entrypoint.sh"
-            - "config.json"
-            - ".github/workflows/docker-publish.yml"
-    pull_request:
-        branches:
-            - main
-    workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile"
+      - "entrypoint.sh"
+      - "config.json"
+      - ".github/workflows/docker-publish.yml"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 env:
-    REGISTRY: docker.io
-    IMAGE_NAME: ketbom/hytale-server
+  REGISTRY: docker.io
+  IMAGE_NAME: ketbom/hytale-server
 
 jobs:
-    build-and-push:
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-            packages: write
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-            - name: Read version from config.json
-              id: config
-              run: |
-                  VERSION=$(jq -r '.version' config.json)
-                  TITLE=$(jq -r '.title' config.json)
-                  DESCRIPTION=$(jq -r '.description' config.json)
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "title=$TITLE" >> $GITHUB_OUTPUT
-                  echo "description=$DESCRIPTION" >> $GITHUB_OUTPUT
-                  echo "Version: $VERSION"
+      - name: Read version from config.json
+        id: config
+        run: |
+          VERSION=$(jq -r '.version' config.json)
+          TITLE=$(jq -r '.title' config.json)
+          DESCRIPTION=$(jq -r '.description' config.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "description=$DESCRIPTION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
 
-            - name: Set up QEMU
-              uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-            - name: Login to Docker Hub
-              if: github.event_name != 'pull_request'
-              uses: docker/login-action@v3
-              with:
-                  username: ${{ secrets.DOCKERHUB_USERNAME }}
-                  password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            - name: Extract metadata
-              id: meta
-              uses: docker/metadata-action@v5
-              with:
-                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-                  tags: |
-                      type=raw,value=${{ steps.config.outputs.version }}
-                      type=raw,value=latest,enable={{is_default_branch}}
-                  labels: |
-                      org.opencontainers.image.title=${{ steps.config.outputs.title }}
-                      org.opencontainers.image.description=${{ steps.config.outputs.description }}
-                      org.opencontainers.image.version=${{ steps.config.outputs.version }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.config.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=${{ steps.config.outputs.title }}
+            org.opencontainers.image.description=${{ steps.config.outputs.description }}
+            org.opencontainers.image.version=${{ steps.config.outputs.version }}
 
-            - name: Build and push
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  platforms: linux/amd64,linux/arm64
-                  push: ${{ github.event_name != 'pull_request' }}
-                  tags: ${{ steps.meta.outputs.tags }}
-                  labels: ${{ steps.meta.outputs.labels }}
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-            - name: Create Git Tag
-              if: github.event_name != 'pull_request'
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  VERSION="v${{ steps.config.outputs.version }}"
-                  if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
-                    git tag -a "$VERSION" -m "Release $VERSION"
-                    git push origin "$VERSION"
-                  fi
+      - name: Delete existing tag and release
+        if: github.event_name != 'pull_request'
+        run: |
+          VERSION="v${{ steps.config.outputs.version }}"
 
-            - name: Create GitHub Release
-              if: github.event_name != 'pull_request'
-              uses: softprops/action-gh-release@v1
-              with:
-                  tag_name: v${{ steps.config.outputs.version }}
-                  name: v${{ steps.config.outputs.version }}
-                  body: |
-                      ## Hytale Server v${{ steps.config.outputs.version }}
+          # Delete release if exists
+          gh release delete "$VERSION" --yes 2>/dev/null || true
 
-                      ### Docker Pull
-                      ```bash
-                      docker pull ketbom/hytale-server:${{ steps.config.outputs.version }}
-                      ```
+          # Delete remote tag if exists
+          git push origin --delete "$VERSION" 2>/dev/null || true
 
-                      ### Quick Start
-                      ```bash
-                      mkdir hytale-server && cd hytale-server
-                      curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
-                      mkdir -p server data/universe data/mods data/logs data/config
-                      # Add HytaleServer.jar and Assets.zip to ./server/
-                      docker compose up -d
-                      ```
-                  draft: false
-                  prerelease: false
-                  generate_release_notes: true
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Delete local tag if exists
+          git tag -d "$VERSION" 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Git Tag
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          VERSION="v${{ steps.config.outputs.version }}"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+
+      - name: Create GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.config.outputs.version }}
+          name: v${{ steps.config.outputs.version }}
+          body: |
+            ## Hytale Server v${{ steps.config.outputs.version }}
+
+            ### Docker Pull
+            ```bash
+            docker pull ketbom/hytale-server:${{ steps.config.outputs.version }}
+            ```
+
+            ### Quick Start
+            ```bash
+            mkdir hytale-server && cd hytale-server
+            curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
+            mkdir -p server data/universe data/mods data/logs data/config
+            # Add HytaleServer.jar and Assets.zip to ./server/
+            docker compose up -d
+            ```
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

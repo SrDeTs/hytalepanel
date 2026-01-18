@@ -90,9 +90,6 @@ fi
 
 # Server args
 SERVER_ARGS="--assets Assets.zip --bind ${BIND_ADDR}:${BIND_PORT}"
-[ -n "$VIEW_DISTANCE" ] && SERVER_ARGS="$SERVER_ARGS --view-distance $VIEW_DISTANCE"
-[ -n "$MAX_PLAYERS" ] && SERVER_ARGS="$SERVER_ARGS --max-players $MAX_PLAYERS"
-[ -n "$SERVER_NAME" ] && SERVER_ARGS="$SERVER_ARGS --name $SERVER_NAME"
 [ -n "$SERVER_EXTRA_ARGS" ] && SERVER_ARGS="$SERVER_ARGS $SERVER_EXTRA_ARGS"
 
 # Command pipe for web panel

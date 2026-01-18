@@ -16,9 +16,6 @@ services:
       BIND_ADDR: ${BIND_ADDR:-0.0.0.0}
       AUTO_DOWNLOAD: ${AUTO_DOWNLOAD:-true}
       USE_G1GC: ${USE_G1GC:-true}
-      VIEW_DISTANCE: ${VIEW_DISTANCE:-}
-      MAX_PLAYERS: ${MAX_PLAYERS:-}
-      SERVER_NAME: ${SERVER_NAME:-}
     volumes:
       - ./server:/opt/hytale
       - /etc/machine-id:/etc/machine-id:ro

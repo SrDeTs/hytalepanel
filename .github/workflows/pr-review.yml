@@ -68,11 +68,12 @@ jobs:
         run: |
           echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
           npm test -- --coverage --ci 2>&1 | tee test-output.txt
+          TEST_EXIT_CODE=$?
 
           # Extract results
           if grep -q "Tests:.*passed" test-output.txt; then
-            PASSED=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= passed)')
-            TOTAL=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= total)')
+            PASSED=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= passed)' || echo "0")
+            TOTAL=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= total)' || echo "0")
             echo "✅ **$PASSED/$TOTAL tests passed**" >> $GITHUB_STEP_SUMMARY
           fi
 
@@ -85,12 +86,12 @@ jobs:
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Check if tests passed
-          if grep -q "Test Suites:.*failed" test-output.txt; then
-            echo "::set-output name=status::failed"
-            exit 1
+          # Set output using new syntax
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "status=passed" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=status::passed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
       - name: Add review comment
@@ -138,10 +139,10 @@ jobs:
             }
 
             // Test results
-            const testStatus = '${{ steps.tests.outputs.status }}';
-            if (testStatus === 'passed') {
+            const testStatus = '${{ steps.tests.outputs.status }}' || '${{ steps.tests.outcome }}';
+            if (testStatus === 'passed' || testStatus === 'success') {
               body += '### ✅ Tests Passed\n\n';
-            } else if (testStatus === 'failed') {
+            } else {
               body += '### ❌ Tests Failed\n';
               body += '**Please fix failing tests before merging.**\n\n';
             }

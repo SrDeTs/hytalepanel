@@ -31,6 +31,10 @@ services:
       - "3000:3000"
     environment:
       CONTAINER_NAME: "hytale-server"
+      # Auth credentials - CHANGE THESE!
+      PANEL_USER: "admin"
+      PANEL_PASS: "changeme"
+      # JWT_SECRET: "your-random-secret-here"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:

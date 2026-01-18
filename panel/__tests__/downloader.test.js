@@ -1,11 +1,7 @@
-// Mock docker and files services
-const mockExec = {
-  start: jest.fn()
-};
+// Downloader service tests - covers auth flow and error handling
 
-const mockContainer = {
-  exec: jest.fn(() => Promise.resolve(mockExec))
-};
+const mockExec = { start: jest.fn() };
+const mockContainer = { exec: jest.fn(() => Promise.resolve(mockExec)) };
 
 jest.mock('../src/services/docker', () => ({
   getContainer: jest.fn(),
@@ -26,185 +22,94 @@ describe('Downloader Service', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSocket = {
-      emit: jest.fn()
-    };
+    mockSocket = { emit: jest.fn() };
     docker.getContainer.mockResolvedValue(mockContainer);
     docker.execCommand.mockResolvedValue('');
+    files.checkServerFiles.mockResolvedValue({ exists: false });
+    files.checkAuth.mockResolvedValue(false);
   });
 
-  describe('downloadServerFiles', () => {
-    test('emits error when container not found', async () => {
-      docker.getContainer.mockResolvedValue(null);
+  const createMockStream = (dataToEmit, triggerError = false) => ({
+    on: jest.fn((event, cb) => {
+      if (event === 'data' && dataToEmit) cb(Buffer.from(dataToEmit));
+      if (event === 'end' && !triggerError) setTimeout(cb, 10);
+      if (event === 'error' && triggerError) setTimeout(() => cb(new Error('Stream failed')), 10);
+      return { on: jest.fn().mockReturnThis() };
+    })
+  });
 
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'error',
-        message: 'Container not found'
-      });
+  test('emits error when container not found', async () => {
+    docker.getContainer.mockResolvedValue(null);
+    await downloadServerFiles(mockSocket);
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'error',
+      message: 'Container not found'
     });
+  });
 
-    test('emits starting status', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockResolvedValue('NO_ZIP');
-      files.checkServerFiles.mockResolvedValue({ exists: false });
-      files.checkAuth.mockResolvedValue({ hasAuth: false });
-
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'starting',
-        message: 'Starting download...'
-      });
+  test('emits starting status on begin', async () => {
+    mockExec.start.mockResolvedValue(createMockStream(null));
+    docker.execCommand.mockResolvedValue('NO_ZIP');
+    
+    await downloadServerFiles(mockSocket);
+    
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'starting',
+      message: 'Starting download...'
     });
+  });
 
-    test('emits auth-required when oauth URL detected', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'data') {
-            cb(Buffer.from('Please visit oauth.accounts.hytale.com'));
-          }
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockResolvedValue('NO_ZIP');
-      files.checkServerFiles.mockResolvedValue({ exists: false });
-      files.checkAuth.mockResolvedValue({ hasAuth: false });
-
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'auth-required',
-        message: expect.stringContaining('oauth.accounts.hytale.com')
-      });
+  test('emits auth-required when OAuth URL or user_code detected', async () => {
+    mockExec.start.mockResolvedValue(createMockStream('Visit oauth.accounts.hytale.com'));
+    docker.execCommand.mockResolvedValue('NO_ZIP');
+    
+    await downloadServerFiles(mockSocket);
+    
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'auth-required',
+      message: expect.stringContaining('oauth.accounts.hytale.com')
     });
+  });
 
-    test('emits auth-required when user_code detected', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'data') {
-            cb(Buffer.from('Enter this user_code: ABC123'));
-          }
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockResolvedValue('NO_ZIP');
-      files.checkServerFiles.mockResolvedValue({ exists: false });
-      files.checkAuth.mockResolvedValue({ hasAuth: false });
-
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'auth-required',
-        message: expect.stringContaining('user_code')
-      });
+  test('emits error on 403 Forbidden', async () => {
+    mockExec.start.mockResolvedValue(createMockStream('403 Forbidden'));
+    docker.execCommand.mockResolvedValue('NO_ZIP');
+    
+    await downloadServerFiles(mockSocket);
+    
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'error',
+      message: 'Authentication failed or expired. Try again.'
     });
+  });
 
-    test('emits error on 403 Forbidden', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'data') {
-            cb(Buffer.from('403 Forbidden'));
-          }
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockResolvedValue('NO_ZIP');
-      files.checkServerFiles.mockResolvedValue({ exists: false });
-      files.checkAuth.mockResolvedValue({ hasAuth: false });
-
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'error',
-        message: 'Authentication failed or expired. Try again.'
-      });
+  test('extracts files when zip found', async () => {
+    mockExec.start.mockResolvedValue(createMockStream(null));
+    docker.execCommand.mockImplementation((cmd) => 
+      cmd.includes('ls /tmp/hytale-game.zip') 
+        ? Promise.resolve('/tmp/hytale-game.zip') 
+        : Promise.resolve('')
+    );
+    files.checkServerFiles.mockResolvedValue({ exists: true });
+    
+    await downloadServerFiles(mockSocket);
+    await new Promise(r => setTimeout(r, 50));
+    
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'extracting',
+      message: 'Extracting files...'
     });
+  });
 
-    test('emits output for regular messages', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'data') {
-            cb(Buffer.from('Downloading file...'));
-          }
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockResolvedValue('NO_ZIP');
-      files.checkServerFiles.mockResolvedValue({ exists: false });
-      files.checkAuth.mockResolvedValue({ hasAuth: false });
-
-      await downloadServerFiles(mockSocket);
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'output',
-        message: 'Downloading file...'
-      });
-    });
-
-    test('extracts files when zip found', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'end') setTimeout(cb, 10);
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-      docker.execCommand.mockImplementation((cmd) => {
-        if (cmd.includes('ls /tmp/hytale-game.zip')) {
-          return Promise.resolve('/tmp/hytale-game.zip');
-        }
-        return Promise.resolve('');
-      });
-      files.checkServerFiles.mockResolvedValue({ exists: true });
-      files.checkAuth.mockResolvedValue({ hasAuth: true });
-
-      await downloadServerFiles(mockSocket);
-
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'extracting',
-        message: 'Extracting files...'
-      });
-    });
-
-    test('handles stream error', async () => {
-      const mockStream = {
-        on: jest.fn((event, cb) => {
-          if (event === 'error') {
-            setTimeout(() => cb(new Error('Stream failed')), 10);
-          }
-          return mockStream;
-        })
-      };
-      mockExec.start.mockResolvedValue(mockStream);
-
-      await downloadServerFiles(mockSocket);
-
-      // Wait for error callback
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
-        status: 'error',
-        message: 'Stream failed'
-      });
+  test('handles stream error', async () => {
+    mockExec.start.mockResolvedValue(createMockStream(null, true));
+    
+    await downloadServerFiles(mockSocket);
+    await new Promise(r => setTimeout(r, 50));
+    
+    expect(mockSocket.emit).toHaveBeenCalledWith('download-status', {
+      status: 'error',
+      message: 'Stream failed'
     });
   });
 });

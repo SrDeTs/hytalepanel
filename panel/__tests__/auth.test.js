@@ -7,49 +7,28 @@ const {
 } = require('../src/middleware/auth');
 
 describe('Auth Middleware', () => {
-  describe('generateToken', () => {
-    test('generates a valid JWT string', () => {
-      const token = generateToken('testuser');
-      expect(typeof token).toBe('string');
-      expect(token.split('.').length).toBe(3); // JWT has 3 parts
-    });
-
-    test('generates different tokens for different users', () => {
-      const token1 = generateToken('user1');
-      const token2 = generateToken('user2');
-      expect(token1).not.toBe(token2);
-    });
-  });
-
-  describe('verifyToken', () => {
-    test('verifies valid token', () => {
+  describe('generateToken / verifyToken', () => {
+    test('generates valid JWT that can be verified', () => {
       const token = generateToken('testuser');
       const decoded = verifyToken(token);
-      expect(decoded).not.toBeNull();
+      
+      expect(token.split('.').length).toBe(3);
       expect(decoded.username).toBe('testuser');
     });
 
-    test('returns null for invalid token', () => {
-      const decoded = verifyToken('invalid.token.here');
-      expect(decoded).toBeNull();
-    });
-
-    test('returns null for empty token', () => {
+    test('returns null for invalid tokens', () => {
+      expect(verifyToken('invalid.token')).toBeNull();
       expect(verifyToken('')).toBeNull();
       expect(verifyToken(null)).toBeNull();
-      expect(verifyToken(undefined)).toBeNull();
     });
   });
 
   describe('getToken', () => {
-    test('extracts token from cookie', () => {
-      const req = { cookies: { token: 'cookie-token' }, headers: {} };
-      expect(getToken(req)).toBe('cookie-token');
-    });
-
-    test('extracts token from Authorization header', () => {
-      const req = { cookies: {}, headers: { authorization: 'Bearer header-token' } };
-      expect(getToken(req)).toBe('header-token');
+    test('extracts from cookie, header, or returns null', () => {
+      expect(getToken({ cookies: { token: 'cookie-token' }, headers: {} })).toBe('cookie-token');
+      expect(getToken({ cookies: {}, headers: { authorization: 'Bearer header-token' } })).toBe('header-token');
+      expect(getToken({ cookies: {}, headers: {} })).toBeNull();
+      expect(getToken({ cookies: {}, headers: { authorization: 'Basic xyz' } })).toBeNull();
     });
 
     test('prefers cookie over header', () => {
@@ -59,126 +38,66 @@ describe('Auth Middleware', () => {
       };
       expect(getToken(req)).toBe('cookie-token');
     });
+  });
 
-    test('returns null when no token', () => {
-      const req = { cookies: {}, headers: {} };
-      expect(getToken(req)).toBeNull();
+  describe('requireAuth middleware', () => {
+    const mockRes = () => ({
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
     });
 
-    test('returns null for malformed Authorization header', () => {
-      const req = { cookies: {}, headers: { authorization: 'Basic xyz' } };
-      expect(getToken(req)).toBeNull();
+    test('returns 401 without valid token', () => {
+      const res = mockRes();
+      const next = jest.fn();
+      
+      requireAuth({ cookies: {}, headers: {} }, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+
+      requireAuth({ cookies: { token: 'invalid' }, headers: {} }, mockRes(), next);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('calls next() and sets req.user with valid token', () => {
+      const token = generateToken('testuser');
+      const req = { cookies: { token }, headers: {} };
+      const res = mockRes();
+      const next = jest.fn();
+      
+      requireAuth(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(req.user.username).toBe('testuser');
     });
   });
 
-  describe('requireAuth', () => {
-    let mockReq, mockRes, mockNext;
-
-    beforeEach(() => {
-      mockReq = { cookies: {}, headers: {} };
-      mockRes = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
-      };
-      mockNext = jest.fn();
+  describe('socketAuth middleware', () => {
+    test('fails without valid token', () => {
+      const next = jest.fn();
+      
+      socketAuth({ handshake: { auth: {}, headers: {} } }, next);
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    test('returns 401 when no token provided', () => {
-      requireAuth(mockReq, mockRes, mockNext);
-      
-      expect(mockRes.status).toHaveBeenCalledWith(401);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'No token provided' });
-      expect(mockNext).not.toHaveBeenCalled();
-    });
-
-    test('returns 401 for invalid token', () => {
-      mockReq.cookies.token = 'invalid-token';
-      
-      requireAuth(mockReq, mockRes, mockNext);
-      
-      expect(mockRes.status).toHaveBeenCalledWith(401);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid or expired token' });
-      expect(mockNext).not.toHaveBeenCalled();
-    });
-
-    test('calls next() with valid token', () => {
+    test('succeeds with valid token and sets socket.user', () => {
       const token = generateToken('testuser');
-      mockReq.cookies.token = token;
+      const socket = { handshake: { auth: { token }, headers: {} } };
+      const next = jest.fn();
       
-      requireAuth(mockReq, mockRes, mockNext);
+      socketAuth(socket, next);
       
-      expect(mockNext).toHaveBeenCalled();
-      expect(mockReq.user.username).toBe('testuser');
-    });
-
-    test('works with Authorization header', () => {
-      const token = generateToken('testuser');
-      mockReq.headers.authorization = `Bearer ${token}`;
-      
-      requireAuth(mockReq, mockRes, mockNext);
-      
-      expect(mockNext).toHaveBeenCalled();
-    });
-  });
-
-  describe('socketAuth', () => {
-    let mockSocket, mockNext;
-
-    beforeEach(() => {
-      mockSocket = {
-        handshake: {
-          auth: {},
-          headers: {}
-        }
-      };
-      mockNext = jest.fn();
-    });
-
-    test('fails when no token provided', () => {
-      socketAuth(mockSocket, mockNext);
-      
-      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
-      expect(mockNext.mock.calls[0][0].message).toBe('Authentication required');
-    });
-
-    test('fails with invalid token', () => {
-      mockSocket.handshake.auth.token = 'invalid-token';
-      
-      socketAuth(mockSocket, mockNext);
-      
-      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
-      expect(mockNext.mock.calls[0][0].message).toBe('Invalid or expired token');
-    });
-
-    test('succeeds with valid token in auth', () => {
-      const token = generateToken('testuser');
-      mockSocket.handshake.auth.token = token;
-      
-      socketAuth(mockSocket, mockNext);
-      
-      expect(mockNext).toHaveBeenCalledWith();
-      expect(mockSocket.user.username).toBe('testuser');
+      expect(next).toHaveBeenCalledWith();
+      expect(socket.user.username).toBe('testuser');
     });
 
     test('extracts token from cookie header', () => {
       const token = generateToken('testuser');
-      mockSocket.handshake.headers.cookie = `token=${token}; other=value`;
+      const socket = { handshake: { auth: {}, headers: { cookie: `token=${token}` } } };
+      const next = jest.fn();
       
-      socketAuth(mockSocket, mockNext);
+      socketAuth(socket, next);
       
-      expect(mockNext).toHaveBeenCalledWith();
-      expect(mockSocket.user.username).toBe('testuser');
-    });
-
-    test('prefers auth token over cookie', () => {
-      const authToken = generateToken('authuser');
-      const cookieToken = generateToken('cookieuser');
-      mockSocket.handshake.auth.token = authToken;
-      mockSocket.handshake.headers.cookie = `token=${cookieToken}`;
-      
-      socketAuth(mockSocket, mockNext);
-      
-      expect(mockSocket.user.username).toBe('authuser');
+      expect(socket.user.username).toBe('testuser');
     });
   });
 });

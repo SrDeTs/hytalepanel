@@ -16,7 +16,7 @@ module.exports = {
   auth: {
     // Set these via environment variables!
     username: process.env.PANEL_USER || "admin",
-    password: process.env.PANEL_PASS || "changeme",
+    password: process.env.PANEL_PASS || "admin",
     jwtSecret: process.env.JWT_SECRET || defaultSecret,
     tokenExpiry: "24h"
   },

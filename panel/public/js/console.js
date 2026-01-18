@@ -2,16 +2,18 @@
 const ConsoleManager = {
   el: null,
   socket: null,
-  loadedCount: 0,
   isLoadingMore: false,
   autoScroll: true,
   hasMoreHistory: true,
+  loadedCount: 0,  // Track total logs loaded for offset pagination
+  initialLoadDone: false,
 
   init(elementId, socket) {
     this.el = $(elementId);
     this.socket = socket;
-    this.loadedCount = 0;
     this.hasMoreHistory = true;
+    this.loadedCount = 0;
+    this.initialLoadDone = false;
     this.bindControls();
     this.bindSocketHandlers();
   },
@@ -20,11 +22,16 @@ const ConsoleManager = {
     const self = this;
     const clearBtn = $('console-clear');
 
-    // Lazy load on scroll up
+    // Lazy load on scroll up (only when user scrolls, not on initial load)
     this.el.addEventListener('scroll', function() {
-      if (this.scrollTop < 50 && !self.isLoadingMore && self.hasMoreHistory) {
+      const nearTop = this.scrollTop < 100;
+      const canScroll = this.scrollHeight > this.clientHeight;
+      
+      // Only load more if user manually scrolled up (not initial position)
+      if (nearTop && canScroll && self.initialLoadDone) {
         self.loadMore();
       }
+      
       const nearBottom = this.scrollHeight - this.scrollTop - this.clientHeight < 50;
       self.autoScroll = nearBottom;
     });
@@ -36,62 +43,100 @@ const ConsoleManager = {
     }
   },
 
+  // Extract ISO timestamp from log line (e.g., "2026-01-18T16:28:07.087752320Z ...")
+  extractTimestamp(line) {
+    const match = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/);
+    return match ? match[1] : null;
+  },
+
+  // Format ISO timestamp to local time [DD/MM HH:MM:SS]
+  formatTimestamp(isoString) {
+    if (!isoString) return this.getTimestamp();
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return this.getTimestamp();
+    
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `[${day}/${mon} ${h}:${m}:${s}]`;
+  },
+
   bindSocketHandlers() {
     const self = this;
     
     this.socket.on('logs:history', function(data) {
       if (data.error) {
         console.error('Failed to load logs:', data.error);
+        self.isLoadingMore = false;
+        return;
+      }
+      
+      if (!data.logs || data.logs.length === 0) {
+        self.hasMoreHistory = data.hasMore !== false;
+        self.isLoadingMore = false;
         return;
       }
       
       if (data.initial) {
         self.el.innerHTML = '';
         self.loadedCount = 0;
+        self.hasMoreHistory = true;
       }
       
       const oldScrollHeight = self.el.scrollHeight;
-      const wasAtBottom = self.autoScroll;
       
       // Parse and add logs
       const fragment = document.createDocumentFragment();
       data.logs.forEach(line => {
+        const logTimestamp = self.extractTimestamp(line);
         const cleaned = cleanLog(line).trim();
         if (!cleaned) return;
-        fragment.appendChild(self.createLogElement(cleaned));
+        fragment.appendChild(self.createLogElement(cleaned, logTimestamp));
       });
+      
+      // Update count
+      self.loadedCount += data.logs.length;
+      
+      // Check if more history available
+      if (data.hasMore === false) {
+        self.hasMoreHistory = false;
+      }
       
       if (data.initial) {
         self.el.appendChild(fragment);
         self.el.scrollTop = self.el.scrollHeight;
+        setTimeout(() => { self.initialLoadDone = true; }, 500);
       } else {
+        // Prepend older logs
         self.el.insertBefore(fragment, self.el.firstChild);
         self.el.scrollTop = self.el.scrollHeight - oldScrollHeight;
       }
       
-      self.loadedCount += data.logs.length;
       self.isLoadingMore = false;
-      
-      // If we got fewer logs than expected, no more history
-      if (data.logs.length < 100) {
-        self.hasMoreHistory = false;
-      }
     });
   },
 
   loadMore() {
     if (this.isLoadingMore || !this.hasMoreHistory) return;
+    if (this.loadedCount === 0) return;
+    
     this.isLoadingMore = true;
-    this.socket.emit('logs:more', { count: this.loadedCount + 200 });
+    this.socket.emit('logs:more', { 
+      currentCount: this.loadedCount,
+      batchSize: 200
+    });
   },
 
-  createLogElement(text) {
+  createLogElement(text, isoTimestamp = null) {
     const div = document.createElement('div');
     div.className = 'log-line ' + getLogType(text);
 
     const timeSpan = document.createElement('span');
     timeSpan.className = 'log-time';
-    timeSpan.textContent = this.getTimestamp() + ' ';
+    // Use original timestamp for historical logs, current time for streaming
+    timeSpan.textContent = this.formatTimestamp(isoTimestamp) + ' ';
 
     div.appendChild(timeSpan);
     div.appendChild(document.createTextNode(text));
@@ -139,7 +184,8 @@ const ConsoleManager = {
 
   clear() {
     this.el.innerHTML = '';
-    this.loadedCount = 0;
     this.hasMoreHistory = true;
+    this.loadedCount = 0;
+    this.initialLoadDone = false;
   }
 };

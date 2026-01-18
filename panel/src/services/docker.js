@@ -119,32 +119,29 @@ async function getLogsHistory(tail = 500) {
   const c = await getContainer();
   if (!c) throw new Error("Container not found");
   
-  const stream = await c.logs({
-    follow: false,
-    stdout: true,
-    stderr: true,
-    tail,
-    timestamps: true
+  return new Promise((resolve, reject) => {
+    c.logs({
+      follow: false,
+      stdout: true,
+      stderr: true,
+      tail,
+      timestamps: true
+    }, (err, buffer) => {
+      if (err) return reject(err);
+      
+      if (!buffer || buffer.length === 0) {
+        return resolve([]);
+      }
+      
+      // Container has tty: true, so logs come as plain text (no 8-byte header)
+      const text = buffer.toString('utf8');
+      const lines = text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      
+      resolve(lines);
+    });
   });
-
-  // Parse the buffer into lines
-  const lines = [];
-  let offset = 0;
-  
-  while (offset < stream.length) {
-    // Docker log format: 8 bytes header + payload
-    if (offset + 8 > stream.length) break;
-    
-    const size = stream.readUInt32BE(offset + 4);
-    if (offset + 8 + size > stream.length) break;
-    
-    const line = stream.slice(offset + 8, offset + 8 + size).toString('utf8').trim();
-    if (line) lines.push(line);
-    
-    offset += 8 + size;
-  }
-  
-  return lines;
 }
 
 async function getArchive(path) {

@@ -91,11 +91,22 @@ function setupSocketHandlers(io) {
       socket.emit("downloader-auth", await files.checkAuth());
     });
 
-    // Request more log history
-    socket.on("logs:more", async ({ count = 200 }) => {
+    // Request more log history using offset-based pagination
+    socket.on("logs:more", async ({ currentCount = 0, batchSize = 200 }) => {
       try {
-        const history = await docker.getLogsHistory(count);
-        socket.emit("logs:history", { logs: history, initial: false });
+        // Request more logs than client has, then slice the older portion
+        const total = currentCount + batchSize;
+        const allLogs = await docker.getLogsHistory(total);
+        
+        // If we got fewer logs than requested total, we've reached the end
+        // Return only the older logs (ones the client doesn't have yet)
+        const olderLogs = allLogs.slice(0, Math.max(0, allLogs.length - currentCount));
+        
+        socket.emit("logs:history", { 
+          logs: olderLogs, 
+          initial: false,
+          hasMore: allLogs.length >= total
+        });
       } catch (e) {
         socket.emit("logs:history", { logs: [], error: e.message });
       }

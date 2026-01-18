@@ -2,8 +2,12 @@ const express = require("express");
 const multer = require("multer");
 const config = require("../config");
 const files = require("../services/files");
+const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
+
+// All routes require authentication
+router.use(requireAuth);
 
 const upload = multer({
   storage: multer.memoryStorage(),

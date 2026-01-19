@@ -44,30 +44,36 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Install dependencies
-        working-directory: panel
-        run: npm install
-
-      - name: Syntax check
-        working-directory: panel
         run: |
-          echo "## 🔍 Syntax Check" >> $GITHUB_STEP_SUMMARY
-          if node --check src/server.js 2>&1; then
-            echo "✅ No syntax errors found" >> $GITHUB_STEP_SUMMARY
+          pnpm --dir panel install
+          pnpm --dir panel/backend install
+          pnpm --dir panel/frontend install
+
+      - name: TypeScript check
+        run: |
+          echo "## 🔍 Type Check" >> $GITHUB_STEP_SUMMARY
+          if pnpm --dir panel/backend check 2>&1 && pnpm --dir panel/frontend check 2>&1; then
+            echo "✅ No type errors found" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ Syntax errors detected" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Type errors detected" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
       - name: Run tests
         id: tests
-        working-directory: panel
+        working-directory: panel/backend
         continue-on-error: true
         run: |
           echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
-          npm test -- --coverage --ci 2>&1 | tee test-output.txt
+          pnpm test:ci 2>&1 | tee test-output.txt
           TEST_EXIT_CODE=$?
 
           # Extract results
@@ -75,15 +81,6 @@ jobs:
             PASSED=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= passed)' || echo "0")
             TOTAL=$(grep "Tests:" test-output.txt | grep -oP '\d+(?= total)' || echo "0")
             echo "✅ **$PASSED/$TOTAL tests passed**" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Extract coverage
-          if grep -q "All files" test-output.txt; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            grep -A1 "All files" test-output.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
           # Set output using new syntax
@@ -105,8 +102,8 @@ jobs:
 
             // Categorize changes
             const categories = {
-              backend: changedFiles.filter(f => f.startsWith('panel/src/')),
-              frontend: changedFiles.filter(f => f.startsWith('panel/public/')),
+              backend: changedFiles.filter(f => f.startsWith('panel/backend/')),
+              frontend: changedFiles.filter(f => f.startsWith('panel/frontend/')),
               docker: changedFiles.filter(f => f.includes('Dockerfile') || f.includes('docker-compose')),
               config: changedFiles.filter(f => f.endsWith('.yml') || f.endsWith('.json') || f.endsWith('.env'))
             };
@@ -126,7 +123,7 @@ jobs:
               body += '### Frontend Changes\n';
               categories.frontend.forEach(f => body += `- \`${f}\`\n`);
               body += '\n⚠️ **Review checklist:**\n';
-              body += '- [ ] Translations updated (i18n.js)\n';
+              body += '- [ ] Translations updated\n';
               body += '- [ ] UI matches existing style\n\n';
             }
 

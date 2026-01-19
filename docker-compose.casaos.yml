@@ -1,3 +1,8 @@
+# Docker Compose for ZimaOS / CasaOS
+# Use this if you can't mount /etc/machine-id:ro
+#
+# Usage: docker compose -f docker-compose.casaos.yml up -d
+
 services:
   hytale:
     image: ketbom/hytale-server:latest
@@ -19,8 +24,8 @@ services:
       SERVER_EXTRA_ARGS: ${SERVER_EXTRA_ARGS:-}
     volumes:
       - ./server:/opt/hytale
-      - /etc/machine-id:/etc/machine-id:ro
-      - /sys/class/dmi/id:/sys/class/dmi/id:ro
+      # NOTE: /etc/machine-id mount removed for ZimaOS/CasaOS compatibility
+      # The container will generate and persist its own machine-id in ./server/.machine-id
 
   panel:
     image: ketbom/hytale-panel:latest

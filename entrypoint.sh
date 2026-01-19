@@ -3,19 +3,54 @@
 cd "$SERVER_HOME"
 
 # Machine-id handling (needed for encrypted credential storage)
-# Some systems (ZimaOS, CasaOS) create an empty /etc/machine-id
+# Some systems (ZimaOS, CasaOS) can't mount /etc/machine-id:ro
 # We persist it in server folder to survive container restarts
-if [ -f "$SERVER_HOME/.machine-id" ] && [ -s "$SERVER_HOME/.machine-id" ]; then
-    # Restore from persistent copy
-    cat "$SERVER_HOME/.machine-id" > /etc/machine-id
-elif [ ! -s /etc/machine-id ]; then
-    # Generate new if missing or empty
-    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
-    cp /etc/machine-id "$SERVER_HOME/.machine-id"
-else
-    # First run with valid machine-id, persist it
-    cp /etc/machine-id "$SERVER_HOME/.machine-id"
-fi
+setup_machine_id() {
+    local PERSISTENT_ID="$SERVER_HOME/.machine-id"
+    
+    # 1. Try to restore from persistent copy first
+    if [ -f "$PERSISTENT_ID" ] && [ -s "$PERSISTENT_ID" ]; then
+        echo "[HYTALE] Restoring machine-id from persistent storage..."
+        cat "$PERSISTENT_ID" > /etc/machine-id
+        chmod 444 /etc/machine-id
+        return 0
+    fi
+    
+    # 2. Check if host machine-id is valid (mounted)
+    if [ -s /etc/machine-id ] && [ "$(wc -c < /etc/machine-id)" -ge 32 ]; then
+        echo "[HYTALE] Using host machine-id..."
+        cp /etc/machine-id "$PERSISTENT_ID"
+        chmod 444 /etc/machine-id
+        return 0
+    fi
+    
+    # 3. Generate new machine-id
+    echo "[HYTALE] Generating new machine-id..."
+    
+    # Try dbus-uuidgen first (most reliable)
+    if command -v dbus-uuidgen &> /dev/null; then
+        dbus-uuidgen > /etc/machine-id
+    # Fallback to systemd-machine-id-setup
+    elif command -v systemd-machine-id-setup &> /dev/null; then
+        systemd-machine-id-setup
+    # Last resort: generate from /proc
+    else
+        cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+    fi
+    
+    # Verify and persist
+    if [ -s /etc/machine-id ] && [ "$(wc -c < /etc/machine-id)" -ge 32 ]; then
+        cp /etc/machine-id "$PERSISTENT_ID"
+        chmod 444 /etc/machine-id
+        echo "[HYTALE] Machine-id: $(cat /etc/machine-id)"
+        return 0
+    else
+        echo "[HYTALE] WARNING: Failed to setup machine-id. Encrypted auth may not work."
+        return 1
+    fi
+}
+
+setup_machine_id
 
 # Fix permissions on mounted volumes (runs as root)
 chown -R hytale:hytale "$SERVER_HOME"

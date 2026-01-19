@@ -5,9 +5,9 @@ LABEL description="Hytale Dedicated Server"
 
 ARG TARGETARCH
 
-# Dependencies + gosu for privilege drop
+# Dependencies + gosu for privilege drop + dbus for machine-id
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash curl unzip gosu \
+    bash curl unzip gosu dbus \
     && rm -rf /var/lib/apt/lists/*
 
 # Download hytale-downloader (x64 only - not available for ARM64)

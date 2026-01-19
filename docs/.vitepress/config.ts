@@ -28,7 +28,8 @@ const guideSidebar = (lang: string) => [
     text: lang === 'es' ? 'Avanzado' : lang === 'uk' ? 'Розширене' : 'Advanced',
     items: [
       { text: lang === 'es' ? 'Desarrollo' : lang === 'uk' ? 'Розробка' : 'Development', link: `${lang === 'en' ? '' : '/' + lang}/guide/development` },
-      { text: lang === 'es' ? 'Soporte ARM64' : lang === 'uk' ? 'Підтримка ARM64' : 'ARM64 Support', link: `${lang === 'en' ? '' : '/' + lang}/guide/arm64` }
+      { text: lang === 'es' ? 'Soporte ARM64' : lang === 'uk' ? 'Підтримка ARM64' : 'ARM64 Support', link: `${lang === 'en' ? '' : '/' + lang}/guide/arm64` },
+      { text: lang === 'es' ? 'Solución de Problemas' : lang === 'uk' ? 'Усунення несправностей' : 'Troubleshooting', link: `${lang === 'en' ? '' : '/' + lang}/guide/troubleshooting` }
     ]
   }
 ]

@@ -70,11 +70,19 @@
 <div class="dashboard">
   <div class="dashboard-header">
     <div class="dashboard-logo">
-      <img src="/images/logo.png" alt="Hytale" class="logo-img" />
+      <img src="/images/logo.png" alt="HytalePanel" class="logo-img" />
       <div class="logo-text">
-        <h1>HYTALE</h1>
+        <h1>HYTALEPANEL</h1>
         <span class="subtitle">{$_('serverPanel')}</span>
       </div>
+    </div>
+    <div class="header-links">
+      <a href="https://hytalepanel.ketbome.com/" target="_blank" class="docs-link" title={$_('documentation')}>
+        📚 {$_('docs')}
+      </a>
+      <a href="https://github.com/ketbome/hytalepanel/issues" target="_blank" class="docs-link" title={$_('reportIssue')}>
+        🐛 {$_('issues')}
+      </a>
     </div>
   </div>
 

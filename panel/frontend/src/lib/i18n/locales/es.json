@@ -163,5 +163,7 @@
   "configHint": "Reinicia el servidor para aplicar cambios",
   "stopServerToEdit": "Detén el servidor para editar configuración",
   "docs": "Docs",
-  "documentation": "Documentación"
+  "documentation": "Documentación",
+  "issues": "Problemas",
+  "reportIssue": "Reportar Problema"
 }

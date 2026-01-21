@@ -163,5 +163,7 @@
   "configHint": "Restart server to apply changes",
   "stopServerToEdit": "Stop server to edit configuration",
   "docs": "Docs",
-  "documentation": "Documentation"
+  "documentation": "Documentation",
+  "issues": "Issues",
+  "reportIssue": "Report Issue"
 }

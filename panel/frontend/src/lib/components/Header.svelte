@@ -75,6 +75,9 @@
     <a href="https://hytalepanel.ketbome.com/" target="_blank" class="docs-link" title={$_('documentation')}>
       📚 {$_('docs')}
     </a>
+    <a href="https://github.com/ketbome/hytalepanel/issues" target="_blank" class="docs-link" title={$_('reportIssue')}>
+      🐛 {$_('issues')}
+    </a>
     <div class="lang-selector">
       <select class="lang-dropdown" value={$locale} onchange={handleLangChange}>
         <option value="en">English</option>

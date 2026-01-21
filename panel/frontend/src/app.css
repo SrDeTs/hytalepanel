@@ -1901,8 +1901,34 @@ header {
 }
 
 .dashboard-header {
+  position: relative;
   text-align: center;
   padding: 40px 20px;
+}
+
+.dashboard-header .header-links {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+.dashboard-header .docs-link {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 8px 16px;
+  border: 2px solid var(--mc-gray);
+  background: var(--mc-dark);
+  transition: all 0.2s;
+}
+
+.dashboard-header .docs-link:hover {
+  color: var(--hytale-yellow);
+  border-color: var(--hytale-yellow);
 }
 
 .dashboard-logo {

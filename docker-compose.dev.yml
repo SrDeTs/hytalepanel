@@ -1,32 +1,6 @@
 # Development docker-compose with hot reload
+# Servers are created dynamically from the Dashboard
 services:
-  hytale:
-    build: .
-    image: hytale-server:dev
-    container_name: ${CONTAINER_NAME:-hytale-server}
-    restart: on-failure
-    stdin_open: true
-    tty: true
-    privileged: true
-    ports:
-      - "${BIND_PORT:-5520}:${BIND_PORT:-5520}/udp"
-    environment:
-      JAVA_XMS: ${JAVA_XMS:-4G}
-      JAVA_XMX: ${JAVA_XMX:-8G}
-      BIND_PORT: ${BIND_PORT:-5520}
-      BIND_ADDR: ${BIND_ADDR:-0.0.0.0}
-      USE_G1GC: ${USE_G1GC:-true}
-      MAX_GC_PAUSE_MILLIS: "200"
-      G1_NEW_SIZE_PERCENT: "30"
-      G1_MAX_NEW_SIZE_PERCENT: "40"
-      G1_HEAP_REGION_SIZE: "8M"
-    volumes:
-      - ./server:/opt/hytale
-      - ./data/universe:/opt/hytale/universe
-      - ./data/mods:/opt/hytale/mods
-      - ./data/logs:/opt/hytale/logs
-      - ./data/config:/opt/hytale/config
-
   panel:
     build:
       context: ./panel
@@ -37,16 +11,16 @@ services:
       - "${PANEL_PORT:-3000}:3000"
       - "5173:5173"
     environment:
-      CONTAINER_NAME: ${CONTAINER_NAME:-hytale-server}
       PANEL_PORT: 3000
       PANEL_USER: ${PANEL_USER:-admin}
       PANEL_PASS: ${PANEL_PASS:-admin}
       JWT_SECRET: ${JWT_SECRET:-}
       MODTALE_API_KEY: ${MODTALE_API_KEY:-}
+      DATA_PATH: /opt/hytale-panel/data
     volumes:
       - ./panel/backend/src:/app/backend/src
       - ./panel/frontend/src:/app/frontend/src
+      - ./panel/frontend/public:/app/frontend/public
       - ./panel/tsconfig.base.json:/app/tsconfig.base.json
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - hytale
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/panel:/opt/hytale-panel/data

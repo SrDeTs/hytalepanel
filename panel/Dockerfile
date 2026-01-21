@@ -31,12 +31,19 @@ RUN pnpm install --prod
 FROM node:25-alpine
 WORKDIR /app
 
+# Install docker CLI for docker-compose commands
+RUN apk add --no-cache docker-cli docker-cli-compose
+
 COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 COPY --from=backend-build /app/backend/dist ./backend/dist
 COPY --from=frontend-build /app/public-dist ./public-dist
 COPY backend/package.json ./backend/
 
+# Create data directory for multi-server persistence
+RUN mkdir -p /opt/hytale-panel/data/servers
+
 ENV NODE_ENV=production
+ENV DATA_PATH=/opt/hytale-panel/data
 EXPOSE 3000
 
 WORKDIR /app/backend

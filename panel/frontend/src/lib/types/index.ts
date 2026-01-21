@@ -204,7 +204,7 @@ export interface Toast {
   type: ToastType;
 }
 
-export type TabId = 'setup' | 'files' | 'mods' | 'commands' | 'control';
+export type TabId = 'setup' | 'files' | 'mods' | 'commands' | 'control' | 'config';
 
 // Socket types
 export interface ActionStatus {

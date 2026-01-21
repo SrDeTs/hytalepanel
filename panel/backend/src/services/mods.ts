@@ -57,17 +57,21 @@ export interface ModsListResult extends OperationResult {
   mods: InstalledMod[];
 }
 
-async function ensureModsSetup(): Promise<OperationResult> {
+async function ensureModsSetup(containerName?: string): Promise<OperationResult> {
   try {
-    await docker.execCommand(`mkdir -p "${MODS_DIR}"`, 5000);
-    const checkResult = await docker.execCommand(`cat "${METADATA_FILE}" 2>/dev/null || echo "NOT_FOUND"`);
+    await docker.execCommand(`mkdir -p "${MODS_DIR}"`, 5000, containerName);
+    const checkResult = await docker.execCommand(
+      `cat "${METADATA_FILE}" 2>/dev/null || echo "NOT_FOUND"`,
+      30000,
+      containerName
+    );
 
     if (checkResult.includes('NOT_FOUND')) {
       const initialData = JSON.stringify({ version: 1, apiKey: null, mods: [] }, null, 2);
       const pack = tar.pack();
       pack.entry({ name: path.basename(METADATA_FILE) }, initialData);
       pack.finalize();
-      await docker.putArchive(pack, { path: path.dirname(METADATA_FILE) });
+      await docker.putArchive(pack, { path: path.dirname(METADATA_FILE) }, containerName);
     }
 
     return { success: true };
@@ -76,11 +80,11 @@ async function ensureModsSetup(): Promise<OperationResult> {
   }
 }
 
-async function loadMods(): Promise<{ success: boolean; data: ModsData; error?: string }> {
+async function loadMods(containerName?: string): Promise<{ success: boolean; data: ModsData; error?: string }> {
   try {
-    await ensureModsSetup();
+    await ensureModsSetup(containerName);
 
-    const stream = await docker.getArchive(METADATA_FILE);
+    const stream = await docker.getArchive(METADATA_FILE, containerName);
 
     return new Promise((resolve, reject) => {
       const extract = tar.extract();
@@ -113,29 +117,31 @@ async function loadMods(): Promise<{ success: boolean; data: ModsData; error?: s
   }
 }
 
-async function saveMods(modsData: ModsData): Promise<OperationResult> {
+async function saveMods(modsData: ModsData, containerName?: string): Promise<OperationResult> {
   try {
     const content = JSON.stringify(modsData, null, 2);
     const pack = tar.pack();
     pack.entry({ name: path.basename(METADATA_FILE) }, content);
     pack.finalize();
 
-    await docker.putArchive(pack, { path: path.dirname(METADATA_FILE) });
+    await docker.putArchive(pack, { path: path.dirname(METADATA_FILE) }, containerName);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function listInstalledMods(): Promise<ModsListResult> {
+export async function listInstalledMods(containerName?: string): Promise<ModsListResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error, mods: [] };
     }
 
     const lsResult = await docker.execCommand(
-      `ls -la "${MODS_DIR}" 2>/dev/null | grep -E "\\.(jar|disabled|zip)$" || echo ""`
+      `ls -la "${MODS_DIR}" 2>/dev/null | grep -E "\\.(jar|disabled|zip)$" || echo ""`,
+      30000,
+      containerName
     );
 
     const filesInDir: Array<{ fileName: string; fileSize: number }> = [];
@@ -209,7 +215,7 @@ export async function listInstalledMods(): Promise<ModsListResult> {
     }
 
     if (needsSave) {
-      await saveMods(result.data);
+      await saveMods(result.data, containerName);
     }
 
     return { success: true, mods };
@@ -218,9 +224,13 @@ export async function listInstalledMods(): Promise<ModsListResult> {
   }
 }
 
-export async function installMod(fileBuffer: Buffer, metadata: ModMetadata): Promise<ModResult> {
+export async function installMod(
+  fileBuffer: Buffer,
+  metadata: ModMetadata,
+  containerName?: string
+): Promise<ModResult> {
   try {
-    await ensureModsSetup();
+    await ensureModsSetup(containerName);
 
     const modId = crypto.randomUUID();
     const fileName =
@@ -230,9 +240,9 @@ export async function installMod(fileBuffer: Buffer, metadata: ModMetadata): Pro
     pack.entry({ name: fileName }, fileBuffer);
     pack.finalize();
 
-    await docker.putArchive(pack, { path: MODS_DIR });
+    await docker.putArchive(pack, { path: MODS_DIR }, containerName);
 
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     const modsData = result.data;
 
     const existingIndex = modsData.mods.findIndex(
@@ -260,7 +270,8 @@ export async function installMod(fileBuffer: Buffer, metadata: ModMetadata): Pro
       if (modsData.mods[existingIndex].fileName !== fileName) {
         await docker.execCommand(
           `rm -f "${MODS_DIR}/${modsData.mods[existingIndex].fileName}" "${MODS_DIR}/${modsData.mods[existingIndex].fileName}.disabled"`,
-          5000
+          5000,
+          containerName
         );
       }
       modsData.mods[existingIndex] = modEntry;
@@ -268,7 +279,7 @@ export async function installMod(fileBuffer: Buffer, metadata: ModMetadata): Pro
       modsData.mods.push(modEntry);
     }
 
-    await saveMods(modsData);
+    await saveMods(modsData, containerName);
 
     return { success: true, mod: modEntry };
   } catch (e) {
@@ -276,9 +287,9 @@ export async function installMod(fileBuffer: Buffer, metadata: ModMetadata): Pro
   }
 }
 
-export async function uninstallMod(modId: string): Promise<OperationResult> {
+export async function uninstallMod(modId: string, containerName?: string): Promise<OperationResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error };
     }
@@ -292,10 +303,14 @@ export async function uninstallMod(modId: string): Promise<OperationResult> {
 
     const mod = modsData.mods[modIndex];
 
-    await docker.execCommand(`rm -f "${MODS_DIR}/${mod.fileName}" "${MODS_DIR}/${mod.fileName}.disabled"`, 5000);
+    await docker.execCommand(
+      `rm -f "${MODS_DIR}/${mod.fileName}" "${MODS_DIR}/${mod.fileName}.disabled"`,
+      5000,
+      containerName
+    );
 
     modsData.mods.splice(modIndex, 1);
-    await saveMods(modsData);
+    await saveMods(modsData, containerName);
 
     return { success: true };
   } catch (e) {
@@ -303,9 +318,9 @@ export async function uninstallMod(modId: string): Promise<OperationResult> {
   }
 }
 
-export async function enableMod(modId: string): Promise<ModResult> {
+export async function enableMod(modId: string, containerName?: string): Promise<ModResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error };
     }
@@ -320,15 +335,19 @@ export async function enableMod(modId: string): Promise<ModResult> {
     const disabledPath = `${MODS_DIR}/${mod.fileName}.disabled`;
     const enabledPath = `${MODS_DIR}/${mod.fileName}`;
 
-    const checkResult = await docker.execCommand(`test -f "${disabledPath}" && echo "EXISTS" || echo "NOT_FOUND"`);
+    const checkResult = await docker.execCommand(
+      `test -f "${disabledPath}" && echo "EXISTS" || echo "NOT_FOUND"`,
+      30000,
+      containerName
+    );
 
     if (checkResult.includes('EXISTS')) {
-      await docker.execCommand(`mv "${disabledPath}" "${enabledPath}"`, 5000);
+      await docker.execCommand(`mv "${disabledPath}" "${enabledPath}"`, 5000, containerName);
     }
 
     mod.enabled = true;
     mod.updatedAt = new Date().toISOString();
-    await saveMods(modsData);
+    await saveMods(modsData, containerName);
 
     return { success: true, mod };
   } catch (e) {
@@ -336,9 +355,9 @@ export async function enableMod(modId: string): Promise<ModResult> {
   }
 }
 
-export async function disableMod(modId: string): Promise<ModResult> {
+export async function disableMod(modId: string, containerName?: string): Promise<ModResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error };
     }
@@ -353,15 +372,19 @@ export async function disableMod(modId: string): Promise<ModResult> {
     const enabledPath = `${MODS_DIR}/${mod.fileName}`;
     const disabledPath = `${MODS_DIR}/${mod.fileName}.disabled`;
 
-    const checkResult = await docker.execCommand(`test -f "${enabledPath}" && echo "EXISTS" || echo "NOT_FOUND"`);
+    const checkResult = await docker.execCommand(
+      `test -f "${enabledPath}" && echo "EXISTS" || echo "NOT_FOUND"`,
+      30000,
+      containerName
+    );
 
     if (checkResult.includes('EXISTS')) {
-      await docker.execCommand(`mv "${enabledPath}" "${disabledPath}"`, 5000);
+      await docker.execCommand(`mv "${enabledPath}" "${disabledPath}"`, 5000, containerName);
     }
 
     mod.enabled = false;
     mod.updatedAt = new Date().toISOString();
-    await saveMods(modsData);
+    await saveMods(modsData, containerName);
 
     return { success: true, mod };
   } catch (e) {
@@ -369,9 +392,9 @@ export async function disableMod(modId: string): Promise<ModResult> {
   }
 }
 
-export async function getMod(modId: string): Promise<ModResult> {
+export async function getMod(modId: string, containerName?: string): Promise<ModResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error };
     }
@@ -382,9 +405,13 @@ export async function getMod(modId: string): Promise<ModResult> {
   }
 }
 
-export async function updateMod(modId: string, updates: Partial<InstalledMod>): Promise<ModResult> {
+export async function updateMod(
+  modId: string,
+  updates: Partial<InstalledMod>,
+  containerName?: string
+): Promise<ModResult> {
   try {
-    const result = await loadMods();
+    const result = await loadMods(containerName);
     if (!result.success) {
       return { success: false, error: result.error };
     }
@@ -402,7 +429,7 @@ export async function updateMod(modId: string, updates: Partial<InstalledMod>): 
       updatedAt: new Date().toISOString()
     };
 
-    await saveMods(modsData);
+    await saveMods(modsData, containerName);
     return { success: true, mod: modsData.mods[modIndex] };
   } catch (e) {
     return { success: false, error: (e as Error).message };

@@ -1,7 +1,7 @@
 {
-  "root": false,
   "extends": ["../biome.json"],
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist"]
+    "include": ["src/**"],
+    "ignore": ["**/node_modules", "**/dist"]
   }
 }

@@ -24,6 +24,7 @@ import {
   total
 } from '$lib/stores/mods';
 import { downloadProgress, downloaderAuth, filesReady, serverStatus } from '$lib/stores/server';
+import { activeServerId, updateServerStatus } from '$lib/stores/servers';
 import { showToast } from '$lib/stores/ui';
 import type {
   ActionStatus,
@@ -49,6 +50,7 @@ import { get, writable } from 'svelte/store';
 
 export const socket = writable<Socket | null>(null);
 export const isConnected = writable<boolean>(false);
+export const joinedServerId = writable<string | null>(null);
 
 let socketInstance: Socket | null = null;
 let dlStartTime: number | null = null;
@@ -67,11 +69,11 @@ export function connectSocket(): Socket {
 
   socketInstance.on('connect', () => {
     isConnected.set(true);
-    socketInstance?.emit('check-files');
   });
 
   socketInstance.on('disconnect', () => {
     isConnected.set(false);
+    joinedServerId.set(null);
   });
 
   socketInstance.on('connect_error', (err: Error) => {
@@ -82,26 +84,48 @@ export function connectSocket(): Socket {
     }
   });
 
+  // Server join result
+  socketInstance.on('server:joined', ({ serverId }: { serverId: string }) => {
+    joinedServerId.set(serverId);
+  });
+
+  socketInstance.on('server:join-error', ({ error }: { error: string }) => {
+    showToast(`Error: ${error}`, 'error');
+  });
+
   // Server status
   socketInstance.on('status', (s: ServerStatus) => {
+    const wasRunning = get(serverStatus).running;
+    const isNowRunning = s.running;
+
     serverStatus.set({
-      running: s.running,
+      running: isNowRunning,
       status: s.status || 'unknown',
       startedAt: s.startedAt
     });
+
+    // Also update in servers list
+    const serverId = get(activeServerId);
+    if (serverId) {
+      updateServerStatus(serverId, isNowRunning ? 'running' : 'stopped');
+    }
+
+    // Load files and mods when server becomes running (or on first status if running)
+    if (isNowRunning && !wasRunning) {
+      socketInstance?.emit('files:list', '/');
+      socketInstance?.emit('mods:list');
+    }
   });
 
-  // Files check - load files and mods after receiving server status
+  // Files check - just update the state, don't auto-load files
   socketInstance.on('files', (f: FilesReady) => {
     filesReady.set({
       hasJar: f.hasJar,
       hasAssets: f.hasAssets,
       ready: f.ready
     });
-    // Load initial data
-    socketInstance?.emit('files:list', '/');
+    // Only check mods config - files will be loaded when status confirms server is running
     socketInstance?.emit('mods:check-config');
-    socketInstance?.emit('mods:list');
   });
 
   // Downloader auth status
@@ -342,6 +366,7 @@ export function disconnectSocket(): void {
   }
   socket.set(null);
   isConnected.set(false);
+  joinedServerId.set(null);
 }
 
 export function emit(event: string, data?: unknown): void {
@@ -350,7 +375,53 @@ export function emit(event: string, data?: unknown): void {
   }
 }
 
-function handleDownloadStatus(d: DownloadStatusEvent): void {
+export function joinServer(serverId: string): void {
+  if (socketInstance) {
+    // Clear ALL previous server data
+    clearLogs();
+    initialLoadDone.set(false);
+    loadedCount.set(0);
+    hasMoreHistory.set(true);
+    filesReady.set({ hasJar: false, hasAssets: false, ready: false });
+    serverStatus.set({ running: false, status: 'offline', startedAt: null });
+    installedMods.set([]);
+    fileList.set([]);
+    currentPath.set('/');
+    downloaderAuth.set(false);
+
+    // Reset download progress completely
+    stopDlTimer();
+    downloadProgress.set({
+      active: false,
+      status: '',
+      percentage: 0,
+      step: 'auth',
+      authUrl: null,
+      authCode: null,
+      time: '0s'
+    });
+
+    socketInstance.emit('server:join', serverId);
+    activeServerId.set(serverId);
+  }
+}
+
+export function leaveServer(): void {
+  if (socketInstance) {
+    socketInstance.emit('server:leave');
+    joinedServerId.set(null);
+    activeServerId.set(null);
+  }
+}
+
+function handleDownloadStatus(d: DownloadStatusEvent & { serverId?: string }): void {
+  // Ignore events from other servers
+  const currentServerId = get(activeServerId);
+  if (d.serverId && d.serverId !== currentServerId) {
+    console.log('[Download] Ignoring event for different server:', d.serverId, 'current:', currentServerId);
+    return;
+  }
+
   console.log('[Download] Status:', d.status, 'Message:', d.message);
   switch (d.status) {
     case 'starting':

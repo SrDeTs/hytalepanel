@@ -3,6 +3,9 @@ FROM node:25-alpine
 
 RUN npm install -g pnpm
 
+# Install docker CLI for docker-compose commands
+RUN apk add --no-cache docker-cli docker-cli-compose
+
 WORKDIR /app
 
 # Install root dependencies
@@ -20,10 +23,20 @@ RUN cd frontend && pnpm install
 # Copy shared config
 COPY tsconfig.base.json biome.json ./
 
-# Copy source (will be overridden by volume mount in dev)
-COPY backend/ ./backend/
-COPY frontend/ ./frontend/
+# Copy source files (NOT node_modules - those stay from pnpm install)
+COPY backend/src ./backend/src
+COPY backend/tsconfig*.json ./backend/
+COPY backend/jest.config.js ./backend/
+COPY frontend/src ./frontend/src
+COPY frontend/public ./frontend/public
+COPY frontend/*.html ./frontend/
+COPY frontend/*.config.* ./frontend/
+COPY frontend/tsconfig.json ./frontend/
 
+# Create data directory for multi-server persistence
+RUN mkdir -p /opt/hytale-panel/data/servers
+
+ENV DATA_PATH=/opt/hytale-panel/data
 EXPOSE 3000 5173
 
 # Start both backend and frontend dev servers

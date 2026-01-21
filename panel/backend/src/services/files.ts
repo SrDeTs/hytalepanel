@@ -132,10 +132,10 @@ export function getFileIcon(filename: string, isDirectory: boolean): FileIcon {
   return icons[ext] || 'file';
 }
 
-export async function listDirectory(dirPath: string): Promise<ListResult> {
+export async function listDirectory(dirPath: string, containerName?: string): Promise<ListResult> {
   try {
     const safePath = sanitizePath(dirPath);
-    const result = await docker.execCommand(`ls -la "${safePath}" 2>/dev/null | tail -n +2`, 10000);
+    const result = await docker.execCommand(`ls -la "${safePath}" 2>/dev/null | tail -n +2`, 10000, containerName);
 
     const files: FileEntry[] = [];
     const lines = result
@@ -176,52 +176,52 @@ export async function listDirectory(dirPath: string): Promise<ListResult> {
   }
 }
 
-export async function createDirectory(dirPath: string): Promise<OperationResult> {
+export async function createDirectory(dirPath: string, containerName?: string): Promise<OperationResult> {
   try {
     const safePath = sanitizePath(dirPath);
-    await docker.execCommand(`mkdir -p "${safePath}"`, 5000);
+    await docker.execCommand(`mkdir -p "${safePath}"`, 5000, containerName);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function deleteItem(itemPath: string): Promise<OperationResult> {
+export async function deleteItem(itemPath: string, containerName?: string): Promise<OperationResult> {
   try {
     const safePath = sanitizePath(itemPath);
     if (safePath === basePath) {
       throw new Error('Cannot delete root directory');
     }
-    await docker.execCommand(`rm -rf "${safePath}"`, 10000);
+    await docker.execCommand(`rm -rf "${safePath}"`, 10000, containerName);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function renameItem(oldPath: string, newPath: string): Promise<OperationResult> {
+export async function renameItem(oldPath: string, newPath: string, containerName?: string): Promise<OperationResult> {
   try {
     const safeOld = sanitizePath(oldPath);
     const safeNew = sanitizePath(newPath);
-    await docker.execCommand(`mv "${safeOld}" "${safeNew}"`, 5000);
+    await docker.execCommand(`mv "${safeOld}" "${safeNew}"`, 5000, containerName);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function createBackup(filePath: string): Promise<BackupResult> {
+export async function createBackup(filePath: string, containerName?: string): Promise<BackupResult> {
   try {
     const safePath = sanitizePath(filePath);
     const backupPath = `${safePath}.backup.${Date.now()}`;
-    await docker.execCommand(`cp "${safePath}" "${backupPath}"`, 5000);
+    await docker.execCommand(`cp "${safePath}" "${backupPath}"`, 5000, containerName);
     return { success: true, backupPath: getRelativePath(backupPath) };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function readContent(filePath: string): Promise<ReadResult> {
+export async function readContent(filePath: string, containerName?: string): Promise<ReadResult> {
   try {
     const safePath = sanitizePath(filePath);
 
@@ -229,7 +229,7 @@ export async function readContent(filePath: string): Promise<ReadResult> {
       return { success: false, error: 'File type not editable', binary: true };
     }
 
-    const stream = await docker.getArchive(safePath);
+    const stream = await docker.getArchive(safePath, containerName);
 
     return new Promise((resolve, reject) => {
       const extract = tar.extract();
@@ -257,7 +257,11 @@ export async function readContent(filePath: string): Promise<ReadResult> {
   }
 }
 
-export async function writeContent(filePath: string, content: string): Promise<OperationResult> {
+export async function writeContent(
+  filePath: string,
+  content: string,
+  containerName?: string
+): Promise<OperationResult> {
   try {
     const safePath = sanitizePath(filePath);
     const pack = tar.pack();
@@ -267,7 +271,7 @@ export async function writeContent(filePath: string, content: string): Promise<O
     pack.entry({ name: fileName }, content);
     pack.finalize();
 
-    await docker.putArchive(pack, { path: dirPath });
+    await docker.putArchive(pack, { path: dirPath }, containerName);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -277,7 +281,8 @@ export async function writeContent(filePath: string, content: string): Promise<O
 export async function upload(
   targetDir: string,
   fileName: string,
-  fileBuffer: Buffer
+  fileBuffer: Buffer,
+  containerName?: string
 ): Promise<OperationResult & { fileName?: string }> {
   try {
     const safeDirPath = sanitizePath(targetDir);
@@ -290,27 +295,29 @@ export async function upload(
     pack.entry({ name: fileName }, fileBuffer);
     pack.finalize();
 
-    await docker.putArchive(pack, { path: safeDirPath });
+    await docker.putArchive(pack, { path: safeDirPath }, containerName);
     return { success: true, fileName };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function download(filePath: string): Promise<DownloadResult> {
+export async function download(filePath: string, containerName?: string): Promise<DownloadResult> {
   try {
     const safePath = sanitizePath(filePath);
-    const stream = await docker.getArchive(safePath);
+    const stream = await docker.getArchive(safePath, containerName);
     return { success: true, stream, fileName: path.basename(safePath) };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
 }
 
-export async function checkServerFiles(): Promise<ServerFilesStatus> {
+export async function checkServerFiles(containerName?: string): Promise<ServerFilesStatus> {
   try {
     const result = await docker.execCommand(
-      'ls -la /opt/hytale/*.jar /opt/hytale/*.zip 2>/dev/null || echo "NO_FILES"'
+      'ls -la /opt/hytale/*.jar /opt/hytale/*.zip 2>/dev/null || echo "NO_FILES"',
+      30000,
+      containerName
     );
     const hasJar = result.includes('HytaleServer.jar');
     const hasAssets = result.includes('Assets.zip');
@@ -320,10 +327,12 @@ export async function checkServerFiles(): Promise<ServerFilesStatus> {
   }
 }
 
-export async function checkAuth(): Promise<boolean> {
+export async function checkAuth(containerName?: string): Promise<boolean> {
   try {
     const result = await docker.execCommand(
-      'cat /opt/hytale/.hytale-downloader-credentials.json 2>/dev/null || echo "NO_AUTH"'
+      'cat /opt/hytale/.hytale-downloader-credentials.json 2>/dev/null || echo "NO_AUTH"',
+      30000,
+      containerName
     );
     return !result.includes('NO_AUTH') && result.includes('access_token');
   } catch {
@@ -331,12 +340,14 @@ export async function checkAuth(): Promise<boolean> {
   }
 }
 
-export async function wipeData(): Promise<OperationResult> {
+export async function wipeData(containerName?: string): Promise<OperationResult> {
   try {
     await docker.execCommand(
       'rm -rf /opt/hytale/universe/* /opt/hytale/logs/* /opt/hytale/config/* ' +
         '/opt/hytale/.cache/* /opt/hytale/.download_attempted ' +
-        '/opt/hytale/.hytale-downloader-credentials.json 2>/dev/null || true'
+        '/opt/hytale/.hytale-downloader-credentials.json 2>/dev/null || true',
+      30000,
+      containerName
     );
     return { success: true };
   } catch (e) {

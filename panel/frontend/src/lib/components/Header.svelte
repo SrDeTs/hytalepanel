@@ -2,8 +2,9 @@
   import { _ } from 'svelte-i18n';
   import { locale } from '$lib/i18n';
   import { serverStatus } from '$lib/stores/server';
+  import { activeServer, activeServerId } from '$lib/stores/servers';
   import { logout } from '$lib/stores/auth';
-  import { disconnectSocket } from '$lib/services/socketClient';
+  import { disconnectSocket, leaveServer } from '$lib/services/socketClient';
   import { formatUptime } from '$lib/utils/formatters';
   import StatusBadge from './ui/StatusBadge.svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -42,6 +43,10 @@
     logout();
   }
 
+  function handleBackToPanel(): void {
+    leaveServer();
+  }
+
   function handleLangChange(e: Event): void {
     const target = e.target as HTMLSelectElement;
     locale.set(target.value);
@@ -50,13 +55,29 @@
 
 <header>
   <div class="logo">
+    {#if $activeServerId}
+      <button class="back-btn" onclick={handleBackToPanel} title={$_('backToPanel')}>
+        ←
+      </button>
+    {/if}
     <div class="logo-block">H</div>
     <div>
-      <h1>HYTALE</h1>
-      <div class="logo-subtitle">{$_('serverPanel')}</div>
+      {#if $activeServer}
+        <h1>{$activeServer.name}</h1>
+        <div class="logo-subtitle">:{$activeServer.port}/UDP</div>
+      {:else}
+        <h1>HYTALEPANEL</h1>
+        <div class="logo-subtitle">{$_('serverPanel')}</div>
+      {/if}
     </div>
   </div>
   <div class="header-right">
+    <a href="https://hytalepanel.ketbome.com/" target="_blank" class="docs-link" title={$_('documentation')}>
+      📚 {$_('docs')}
+    </a>
+    <a href="https://github.com/ketbome/hytalepanel/issues" target="_blank" class="docs-link" title={$_('reportIssue')}>
+      🐛 {$_('issues')}
+    </a>
     <div class="lang-selector">
       <select class="lang-dropdown" value={$locale} onchange={handleLangChange}>
         <option value="en">English</option>

@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { isAuthenticated, checkStatus, isLoading } from '$lib/stores/auth';
+  import { activeServerId } from '$lib/stores/servers';
   import { sidebarHidden, panelExpanded } from '$lib/stores/ui';
   import { connectSocket, disconnectSocket } from '$lib/services/socketClient';
   import LoginScreen from '$lib/components/LoginScreen.svelte';
+  import Dashboard from '$lib/components/Dashboard.svelte';
   import Header from '$lib/components/Header.svelte';
   import Console from '$lib/components/Console.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -54,7 +56,11 @@
   </div>
 {:else if !$isAuthenticated}
   <LoginScreen />
+{:else if !$activeServerId}
+  <!-- Dashboard view - no server selected -->
+  <Dashboard />
 {:else}
+  <!-- Server view - managing a specific server -->
   <div class="container" class:sidebar-hidden={$sidebarHidden} class:panel-expanded={$panelExpanded}>
     <Header />
     <div class="grid">

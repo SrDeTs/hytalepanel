@@ -1,32 +1,9 @@
-# Docker Compose for ZimaOS / CasaOS
-# Use this if you can't mount /etc/machine-id:ro
+# HytalePanel for ZimaOS / CasaOS
+# Servers are created dynamically from the Dashboard
 #
 # Usage: docker compose -f docker-compose.casaos.yml up -d
 
 services:
-  hytale:
-    image: ketbom/hytale-server:latest
-    container_name: ${CONTAINER_NAME:-hytale-server}
-    restart: on-failure
-    stdin_open: true
-    tty: true
-    privileged: true
-    ports:
-      - "${BIND_PORT:-5520}:${BIND_PORT:-5520}/udp"
-    environment:
-      TZ: ${TZ:-UTC}
-      JAVA_XMS: ${JAVA_XMS:-4G}
-      JAVA_XMX: ${JAVA_XMX:-8G}
-      BIND_PORT: ${BIND_PORT:-5520}
-      BIND_ADDR: ${BIND_ADDR:-0.0.0.0}
-      AUTO_DOWNLOAD: ${AUTO_DOWNLOAD:-true}
-      USE_G1GC: ${USE_G1GC:-true}
-      SERVER_EXTRA_ARGS: ${SERVER_EXTRA_ARGS:-}
-    volumes:
-      - ./server:/opt/hytale
-      # NOTE: /etc/machine-id mount removed for ZimaOS/CasaOS compatibility
-      # The container will generate and persist its own machine-id in ./server/.machine-id
-
   panel:
     image: ketbom/hytale-panel:latest
     container_name: hytale-panel
@@ -35,13 +12,17 @@ services:
       - "${PANEL_PORT:-3000}:${PANEL_PORT:-3000}"
     environment:
       TZ: ${TZ:-UTC}
-      CONTAINER_NAME: ${CONTAINER_NAME:-hytale-server}
       PANEL_PORT: ${PANEL_PORT:-3000}
       PANEL_USER: ${PANEL_USER:-admin}
       PANEL_PASS: ${PANEL_PASS:-admin}
       JWT_SECRET: ${JWT_SECRET:-}
       MODTALE_API_KEY: ${MODTALE_API_KEY:-}
+      DATA_PATH: /opt/hytale-panel/data
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - hytale
+      - /var/run/docker.sock:/var/run/docker.sock
+      - hytale-panel-data:/opt/hytale-panel/data
+      # NOTE: /etc/machine-id not mounted for ZimaOS/CasaOS compatibility
+      # Each server container will generate its own machine-id
+
+volumes:
+  hytale-panel-data:

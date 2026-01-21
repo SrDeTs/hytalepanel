@@ -32,6 +32,9 @@ export interface Config {
   modtale: {
     apiKey: string | null;
   };
+  data: {
+    path: string;
+  };
 }
 
 const config: Config = {
@@ -118,6 +121,9 @@ const config: Config = {
   },
   modtale: {
     apiKey: process.env.MODTALE_API_KEY || null
+  },
+  data: {
+    path: process.env.DATA_PATH || '/opt/hytale-panel/data'
   }
 };
 

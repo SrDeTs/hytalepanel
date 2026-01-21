@@ -8,6 +8,8 @@ El panel web proporciona una interfaz completa para administrar múltiples servi
 
 El dashboard principal muestra todos tus servidores con su estado actual.
 
+![Vista del Dashboard](/images/dashboard.png)
+
 ### Tarjetas de Servidor
 
 Cada servidor muestra:

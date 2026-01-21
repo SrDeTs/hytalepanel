@@ -8,6 +8,8 @@ The web panel provides a complete interface to manage multiple Hytale servers fr
 
 The main dashboard displays all your servers with their current status.
 
+![Dashboard Preview](/images/dashboard.png)
+
 ### Server Cards
 
 Each server shows:

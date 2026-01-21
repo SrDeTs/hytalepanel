@@ -25,6 +25,30 @@ docker compose up -d
 # http://localhost:3000
 ```
 
+## Data Persistence
+
+> ⚠️ **IMPORTANT: Your world data will be LOST if you don't use volume mounts!**
+
+The `docker-compose.yml` maps `./server` to `/opt/hytale` inside the container. This is where all your server data lives:
+- World files (`universe/`)
+- Server configuration
+- Mods and logs
+
+**If you run the container without this volume mount, all data is stored inside the container and will be deleted when the container is removed.**
+
+```yaml
+# This line in docker-compose.yml saves your data:
+volumes:
+  - ./server:/opt/hytale  # ← Your data is saved in ./server/
+```
+
+### Backup Recommendation
+
+Always backup your `./server` folder before updates or changes:
+```bash
+tar -czvf backup-$(date +%Y%m%d).tar.gz server/
+```
+
 ## Authentication
 
 The panel requires login. Default credentials:

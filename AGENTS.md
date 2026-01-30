@@ -43,7 +43,7 @@ hytale-server/
     │   │   ├── config/     # Environment config
     │   │   ├── middleware/ # JWT auth
     │   │   ├── routes/     # REST API
-    │   │   ├── services/   # Docker, files, mods, Modtale
+    │   │   ├── services/   # Docker, files, mods, Modtale, CurseForge, updater
     │   │   ├── socket/     # Real-time handlers
     │   │   └── server.ts   # Entry point
     │   ├── __tests__/      # Jest tests (TypeScript)
@@ -66,27 +66,29 @@ hytale-server/
 
 ### Backend (panel/backend/src/)
 
-| File                  | Purpose                   |
-| --------------------- | ------------------------- |
-| `server.ts`           | Express app entry         |
-| `config/index.ts`     | Centralized configuration |
-| `services/docker.ts`  | Docker API interactions   |
-| `services/files.ts`   | File manager operations   |
-| `services/mods.ts`    | Mod management            |
-| `services/modtale.ts` | Modtale API client        |
-| `middleware/auth.ts`  | JWT authentication        |
-| `socket/handlers.ts`  | WebSocket events          |
+| File                     | Purpose                   |
+| ------------------------ | ------------------------- |
+| `server.ts`              | Express app entry         |
+| `config/index.ts`        | Centralized configuration |
+| `services/docker.ts`     | Docker API interactions   |
+| `services/files.ts`      | File manager operations   |
+| `services/mods.ts`       | Mod management            |
+| `services/modtale.ts`    | Modtale API client        |
+| `services/curseforge.ts` | CurseForge API client     |
+| `services/updater.ts`    | Server update tracking    |
+| `middleware/auth.ts`     | JWT authentication        |
+| `socket/handlers.ts`     | WebSocket events          |
 
 ### Frontend (panel/frontend/src/lib/)
 
-| Path                       | Purpose                                       |
-| -------------------------- | --------------------------------------------- |
-| `components/`              | Svelte 5 UI components                        |
-| `stores/`                  | Application state (auth, server, files, mods) |
-| `services/socketClient.ts` | Socket.IO wrapper                             |
-| `services/api.ts`          | REST API calls                                |
-| `types/index.ts`           | TypeScript interfaces                         |
-| `i18n/locales/`            | Translations (JSON)                           |
+| Path                       | Purpose                                               |
+| -------------------------- | ----------------------------------------------------- |
+| `components/`              | Svelte 5 UI components                                |
+| `stores/`                  | Application state (auth, server, files, mods, router) |
+| `services/socketClient.ts` | Socket.IO wrapper                                     |
+| `services/api.ts`          | REST API calls                                        |
+| `types/index.ts`           | TypeScript interfaces                                 |
+| `i18n/locales/`            | Translations (JSON)                                   |
 
 ## Tech Stack
 

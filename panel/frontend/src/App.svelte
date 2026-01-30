@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from 'svelte';
   import { isAuthenticated, checkStatus, isLoading } from '$lib/stores/auth';
   import { loadPanelConfig } from '$lib/stores/config';
-  import { activeServerId } from '$lib/stores/servers';
   import { sidebarHidden, panelExpanded } from '$lib/stores/ui';
   import { initRouter, isOnDashboard } from '$lib/stores/router';
   import { connectSocket, disconnectSocket } from '$lib/services/socketClient';

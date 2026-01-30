@@ -3,8 +3,8 @@ FROM node:25-alpine
 
 RUN npm install -g pnpm
 
-# Install docker CLI for docker-compose commands
-RUN apk add --no-cache docker-cli docker-cli-compose
+# Install docker CLI and tzdata for timezone support
+RUN apk add --no-cache docker-cli docker-cli-compose tzdata
 
 WORKDIR /app
 

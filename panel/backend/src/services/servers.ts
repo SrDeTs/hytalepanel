@@ -102,7 +102,7 @@ function generateDockerCompose(server: Server): string {
     ports:
       - "${server.port}:${server.port}/udp"
     environment:
-      TZ: UTC
+      TZ: ${config.timezone}
       JAVA_XMS: ${server.config.javaXms}
       JAVA_XMX: ${server.config.javaXmx}
       BIND_PORT: ${server.port}

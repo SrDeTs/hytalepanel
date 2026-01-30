@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 const defaultSecret = crypto.randomBytes(32).toString('hex');
 
 export interface Config {
+  timezone: string;
   container: {
     name: string;
   };
@@ -44,6 +45,7 @@ export interface Config {
 }
 
 const config: Config = {
+  timezone: process.env.TZ || 'UTC',
   container: {
     name: process.env.CONTAINER_NAME || 'hytale-server'
   },

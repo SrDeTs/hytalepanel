@@ -31,8 +31,8 @@ RUN pnpm install --prod
 FROM node:25-alpine
 WORKDIR /app
 
-# Install docker CLI for docker-compose commands
-RUN apk add --no-cache docker-cli docker-cli-compose
+# Install docker CLI and tzdata for timezone support
+RUN apk add --no-cache docker-cli docker-cli-compose tzdata
 
 COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 COPY --from=backend-build /app/backend/dist ./backend/dist

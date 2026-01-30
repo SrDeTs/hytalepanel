@@ -4,6 +4,7 @@ import * as downloader from '../services/downloader.js';
 import * as files from '../services/files.js';
 import * as mods from '../services/mods.js';
 import * as modtale from '../services/modtale.js';
+import * as curseforge from '../services/curseforge.js';
 import * as servers from '../services/servers.js';
 
 interface LogsMoreParams {
@@ -25,6 +26,19 @@ interface RenameParams {
 interface InstallParams {
   projectId: string;
   versionId: string;
+  metadata: {
+    versionName: string;
+    projectTitle: string;
+    classification?: string;
+    fileName?: string;
+    projectIconUrl?: string | null;
+    projectSlug?: string | null;
+  };
+}
+
+interface CFInstallParams {
+  modId: string;
+  fileId: string;
   metadata: {
     versionName: string;
     projectTitle: string;
@@ -425,6 +439,66 @@ export function setupSocketHandlers(io: Server): void {
 
     socket.on('mods:classifications', async () => {
       socket.emit('mods:classifications-result', await modtale.getClassifications());
+    });
+
+    // CurseForge handlers
+    socket.on('cf:check-config', async () => {
+      socket.emit('cf:config-status', {
+        configured: curseforge.isConfigured()
+      });
+    });
+
+    socket.on('cf:search', async (params: curseforge.SearchParams) => {
+      socket.emit('cf:search-result', await curseforge.searchProjects(params));
+    });
+
+    socket.on('cf:get', async (modId: string) => {
+      socket.emit('cf:get-result', await curseforge.getProject(modId));
+    });
+
+    socket.on('cf:categories', async () => {
+      socket.emit('cf:categories-result', await curseforge.getCategories());
+    });
+
+    socket.on('cf:files', async (modId: string) => {
+      socket.emit('cf:files-result', await curseforge.getModFiles(modId));
+    });
+
+    socket.on('cf:install', async ({ modId, fileId, metadata }: CFInstallParams) => {
+      if (!ctx.containerName) return;
+      socket.emit('cf:install-status', { status: 'downloading', modId });
+
+      const downloadResult = await curseforge.downloadVersion(modId, fileId);
+      if (!downloadResult.success || !downloadResult.buffer) {
+        socket.emit('cf:install-result', { success: false, error: downloadResult.error });
+        return;
+      }
+
+      socket.emit('cf:install-status', { status: 'installing', modId });
+
+      let fileName = downloadResult.fileName || metadata.fileName;
+      if (!fileName) {
+        const ext = metadata.classification === 'PACK' ? 'zip' : 'jar';
+        fileName = `${metadata.projectTitle.replace(/[^a-zA-Z0-9]/g, '-')}-${metadata.versionName}.${ext}`;
+      }
+
+      const installResult = await mods.installMod(
+        downloadResult.buffer,
+        {
+          providerId: 'curseforge',
+          projectId: modId,
+          versionId: fileId,
+          versionName: metadata.versionName,
+          projectTitle: metadata.projectTitle,
+          classification: metadata.classification,
+          fileName,
+          projectIconUrl: metadata.projectIconUrl,
+          projectSlug: metadata.projectSlug
+        },
+        ctx.containerName
+      );
+
+      socket.emit('cf:install-result', installResult);
     });
 
     socket.on('mods:check-updates', async () => {

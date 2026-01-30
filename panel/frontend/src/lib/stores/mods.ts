@@ -2,6 +2,7 @@ import type { InstalledMod, ModProject, ModUpdate } from '$lib/types';
 import { writable } from 'svelte/store';
 
 export type ModView = 'installed' | 'browse' | 'updates';
+export type ModProvider = 'modtale' | 'curseforge';
 
 export const installedMods = writable<InstalledMod[]>([]);
 export const searchResults = writable<ModProject[]>([]);
@@ -11,4 +12,6 @@ export const currentPage = writable<number>(1);
 export const hasMore = writable<boolean>(false);
 export const total = writable<number>(0);
 export const apiConfigured = writable<boolean>(false);
+export const cfApiConfigured = writable<boolean>(false);
+export const currentProvider = writable<ModProvider>('modtale');
 export const isModsLoading = writable<boolean>(false);

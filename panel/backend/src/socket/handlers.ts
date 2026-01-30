@@ -1,12 +1,12 @@
-import type { Server, Socket } from "socket.io";
-import * as docker from "../services/docker.js";
-import * as downloader from "../services/downloader.js";
-import * as files from "../services/files.js";
-import * as mods from "../services/mods.js";
-import * as modtale from "../services/modtale.js";
-import * as curseforge from "../services/curseforge.js";
-import * as servers from "../services/servers.js";
-import * as updater from "../services/updater.js";
+import type { Server, Socket } from 'socket.io';
+import * as curseforge from '../services/curseforge.js';
+import * as docker from '../services/docker.js';
+import * as downloader from '../services/downloader.js';
+import * as files from '../services/files.js';
+import * as mods from '../services/mods.js';
+import * as modtale from '../services/modtale.js';
+import * as servers from '../services/servers.js';
+import * as updater from '../services/updater.js';
 
 interface LogsMoreParams {
   currentCount?: number;
@@ -65,13 +65,13 @@ interface ServerContext {
 }
 
 export function setupSocketHandlers(io: Server): void {
-  io.on("connection", (socket: Socket) => {
-    console.log("Client connected");
+  io.on('connection', (socket: Socket) => {
+    console.log('Client connected');
 
     // Server context for this socket
     const ctx: ServerContext = {
       serverId: null,
-      containerName: null,
+      containerName: null
     };
 
     let logStream: NodeJS.ReadableStream | null = null;
@@ -79,9 +79,7 @@ export function setupSocketHandlers(io: Server): void {
     async function connectLogStream(tail = 0): Promise<void> {
       if (logStream) {
         try {
-          (
-            logStream as NodeJS.ReadableStream & { destroy?: () => void }
-          ).destroy?.();
+          (logStream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
         } catch {
           /* ignore */
         }
@@ -93,37 +91,32 @@ export function setupSocketHandlers(io: Server): void {
       try {
         logStream = await docker.getLogs({
           tail,
-          containerName: ctx.containerName,
+          containerName: ctx.containerName
         });
 
-        logStream.on("data", (chunk: Buffer) => {
-          socket.emit("log", chunk.slice(8).toString("utf8"));
+        logStream.on('data', (chunk: Buffer) => {
+          socket.emit('log', chunk.slice(8).toString('utf8'));
         });
 
-        logStream.on("error", () => {
+        logStream.on('error', () => {
           logStream = null;
         });
-        logStream.on("end", () => {
+        logStream.on('end', () => {
           logStream = null;
         });
       } catch (e) {
-        socket.emit(
-          "error",
-          `Failed to connect to container logs: ${(e as Error).message}`,
-        );
+        socket.emit('error', `Failed to connect to container logs: ${(e as Error).message}`);
       }
     }
 
     // Join a server room and set context
-    socket.on("server:join", async (serverId: string) => {
+    socket.on('server:join', async (serverId: string) => {
       // Leave previous room and cleanup
       if (ctx.serverId) {
         socket.leave(`server:${ctx.serverId}`);
         if (logStream) {
           try {
-            (
-              logStream as NodeJS.ReadableStream & { destroy?: () => void }
-            ).destroy?.();
+            (logStream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
           } catch {
             /* ignore */
           }
@@ -133,7 +126,7 @@ export function setupSocketHandlers(io: Server): void {
 
       const result = await servers.getServer(serverId);
       if (!result.success || !result.server) {
-        socket.emit("server:join-error", { error: "Server not found" });
+        socket.emit('server:join-error', { error: 'Server not found' });
         return;
       }
 
@@ -143,35 +136,32 @@ export function setupSocketHandlers(io: Server): void {
 
       // Check if server is running first
       const status = await docker.getStatus(ctx.containerName);
-      socket.emit("status", status);
+      socket.emit('status', status);
 
       // Only check files/auth/logs if container is running
       if (status.running) {
-        socket.emit("files", await files.checkServerFiles(ctx.containerName));
-        socket.emit(
-          "downloader-auth",
-          await files.checkAuth(ctx.containerName),
-        );
+        socket.emit('files', await files.checkServerFiles(ctx.containerName));
+        socket.emit('downloader-auth', await files.checkAuth(ctx.containerName));
 
         try {
           const history = await docker.getLogsHistory(500, ctx.containerName);
-          socket.emit("logs:history", { logs: history, initial: true });
+          socket.emit('logs:history', { logs: history, initial: true });
         } catch (e) {
-          console.error("Failed to get log history:", (e as Error).message);
+          console.error('Failed to get log history:', (e as Error).message);
         }
 
         await connectLogStream();
       } else {
         // Server is offline - send empty/default values
-        socket.emit("files", { hasJar: false, hasAssets: false, ready: false });
-        socket.emit("downloader-auth", false);
-        socket.emit("logs:history", { logs: [], initial: true });
+        socket.emit('files', { hasJar: false, hasAssets: false, ready: false });
+        socket.emit('downloader-auth', false);
+        socket.emit('logs:history', { logs: [], initial: true });
       }
 
-      socket.emit("server:joined", { serverId, server: result.server });
+      socket.emit('server:joined', { serverId, server: result.server });
     });
 
-    socket.on("server:leave", () => {
+    socket.on('server:leave', () => {
       if (ctx.serverId) {
         socket.leave(`server:${ctx.serverId}`);
       }
@@ -180,9 +170,7 @@ export function setupSocketHandlers(io: Server): void {
 
       if (logStream) {
         try {
-          (
-            logStream as NodeJS.ReadableStream & { destroy?: () => void }
-          ).destroy?.();
+          (logStream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
         } catch {
           /* ignore */
         }
@@ -190,194 +178,152 @@ export function setupSocketHandlers(io: Server): void {
       }
     });
 
-    socket.on("command", async (cmd: string) => {
+    socket.on('command', async (cmd: string) => {
       if (!ctx.containerName) {
-        socket.emit("command-result", {
+        socket.emit('command-result', {
           cmd,
           success: false,
-          error: "No server selected",
+          error: 'No server selected'
         });
         return;
       }
       const result = await docker.sendCommand(cmd, ctx.containerName);
-      socket.emit("command-result", { cmd, ...result });
+      socket.emit('command-result', { cmd, ...result });
     });
 
-    socket.on("download", async () => {
+    socket.on('download', async () => {
       if (!ctx.containerName || !ctx.serverId) return;
-      await downloader.downloadServerFiles(
-        socket,
-        ctx.containerName,
-        ctx.serverId,
-      );
+      await downloader.downloadServerFiles(socket, ctx.containerName, ctx.serverId);
     });
 
-    socket.on("restart", async () => {
+    socket.on('restart', async () => {
       if (!ctx.containerName) return;
-      socket.emit("action-status", { action: "restart", status: "starting" });
+      socket.emit('action-status', { action: 'restart', status: 'starting' });
       const result = await docker.restart(ctx.containerName);
-      socket.emit("action-status", { action: "restart", ...result });
+      socket.emit('action-status', { action: 'restart', ...result });
 
       if (result.success) {
         setTimeout(async () => {
           await connectLogStream(50);
-          socket.emit("status", await docker.getStatus(ctx.containerName!));
+          socket.emit('status', await docker.getStatus(ctx.containerName!));
         }, 2000);
       }
     });
 
-    socket.on("stop", async () => {
+    socket.on('stop', async () => {
       if (!ctx.containerName) return;
-      console.log("[Socket] Stop requested");
-      socket.emit("action-status", { action: "stop", status: "starting" });
+      console.log('[Socket] Stop requested');
+      socket.emit('action-status', { action: 'stop', status: 'starting' });
       const result = await docker.stop(ctx.containerName);
-      console.log("[Socket] Stop result:", result);
-      socket.emit("action-status", { action: "stop", ...result });
+      console.log('[Socket] Stop result:', result);
+      socket.emit('action-status', { action: 'stop', ...result });
     });
 
-    socket.on("kill", async () => {
+    socket.on('kill', async () => {
       if (!ctx.containerName) return;
-      console.log("[Socket] Kill (force stop) requested");
-      socket.emit("action-status", { action: "kill", status: "starting" });
+      console.log('[Socket] Kill (force stop) requested');
+      socket.emit('action-status', { action: 'kill', status: 'starting' });
       const result = await docker.kill(ctx.containerName);
-      console.log("[Socket] Kill result:", result);
-      socket.emit("action-status", { action: "kill", ...result });
+      console.log('[Socket] Kill result:', result);
+      socket.emit('action-status', { action: 'kill', ...result });
     });
 
-    socket.on("start", async () => {
+    socket.on('start', async () => {
       if (!ctx.serverId) return;
-      console.log("[Socket] Start requested");
-      socket.emit("action-status", { action: "start", status: "starting" });
+      console.log('[Socket] Start requested');
+      socket.emit('action-status', { action: 'start', status: 'starting' });
 
       // Use docker-compose up for the server
       const result = await servers.startServer(ctx.serverId);
-      console.log("[Socket] Start result:", result);
-      socket.emit("action-status", { action: "start", ...result });
+      console.log('[Socket] Start result:', result);
+      socket.emit('action-status', { action: 'start', ...result });
 
       if (result.success && ctx.containerName) {
         setTimeout(async () => {
           await connectLogStream(50);
           const status = await docker.getStatus(ctx.containerName!);
-          socket.emit("status", status);
+          socket.emit('status', status);
 
           // Send files status now that server is running
           if (status.running) {
-            socket.emit(
-              "files",
-              await files.checkServerFiles(ctx.containerName!),
-            );
-            socket.emit(
-              "downloader-auth",
-              await files.checkAuth(ctx.containerName!),
-            );
+            socket.emit('files', await files.checkServerFiles(ctx.containerName!));
+            socket.emit('downloader-auth', await files.checkAuth(ctx.containerName!));
           }
         }, 2000);
       }
     });
 
-    socket.on("check-files", async () => {
+    socket.on('check-files', async () => {
       if (!ctx.containerName) return;
-      socket.emit("files", await files.checkServerFiles(ctx.containerName));
-      socket.emit("downloader-auth", await files.checkAuth(ctx.containerName));
+      socket.emit('files', await files.checkServerFiles(ctx.containerName));
+      socket.emit('downloader-auth', await files.checkAuth(ctx.containerName));
     });
 
-    socket.on(
-      "logs:more",
-      async ({ currentCount = 0, batchSize = 200 }: LogsMoreParams) => {
-        if (!ctx.containerName) return;
-        try {
-          const total = currentCount + batchSize;
-          const allLogs = await docker.getLogsHistory(total, ctx.containerName);
-
-          const olderLogs = allLogs.slice(
-            0,
-            Math.max(0, allLogs.length - currentCount),
-          );
-
-          socket.emit("logs:history", {
-            logs: olderLogs,
-            initial: false,
-            hasMore: allLogs.length >= total,
-          });
-        } catch (e) {
-          socket.emit("logs:history", {
-            logs: [],
-            error: (e as Error).message,
-          });
-        }
-      },
-    );
-
-    socket.on("wipe", async () => {
+    socket.on('logs:more', async ({ currentCount = 0, batchSize = 200 }: LogsMoreParams) => {
       if (!ctx.containerName) return;
-      socket.emit("action-status", { action: "wipe", status: "starting" });
+      try {
+        const total = currentCount + batchSize;
+        const allLogs = await docker.getLogsHistory(total, ctx.containerName);
+
+        const olderLogs = allLogs.slice(0, Math.max(0, allLogs.length - currentCount));
+
+        socket.emit('logs:history', {
+          logs: olderLogs,
+          initial: false,
+          hasMore: allLogs.length >= total
+        });
+      } catch (e) {
+        socket.emit('logs:history', {
+          logs: [],
+          error: (e as Error).message
+        });
+      }
+    });
+
+    socket.on('wipe', async () => {
+      if (!ctx.containerName) return;
+      socket.emit('action-status', { action: 'wipe', status: 'starting' });
       const result = await files.wipeData(ctx.containerName);
-      socket.emit("action-status", { action: "wipe", ...result });
-      socket.emit("downloader-auth", await files.checkAuth(ctx.containerName));
+      socket.emit('action-status', { action: 'wipe', ...result });
+      socket.emit('downloader-auth', await files.checkAuth(ctx.containerName));
     });
 
-    socket.on("files:list", async (dirPath = "/") => {
+    socket.on('files:list', async (dirPath = '/') => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "files:list-result",
-        await files.listDirectory(dirPath, ctx.containerName),
-      );
+      socket.emit('files:list-result', await files.listDirectory(dirPath, ctx.containerName));
     });
 
-    socket.on("files:read", async (filePath: string) => {
+    socket.on('files:read', async (filePath: string) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "files:read-result",
-        await files.readContent(filePath, ctx.containerName),
-      );
+      socket.emit('files:read-result', await files.readContent(filePath, ctx.containerName));
     });
 
-    socket.on(
-      "files:save",
-      async ({
-        path: filePath,
-        content,
-        createBackup: shouldBackup,
-      }: SaveParams) => {
-        if (!ctx.containerName) return;
-        let backupResult = null;
-        if (shouldBackup) {
-          backupResult = await files.createBackup(filePath, ctx.containerName);
-        }
-        const result = await files.writeContent(
-          filePath,
-          content,
-          ctx.containerName,
-        );
-        socket.emit("files:save-result", { ...result, backup: backupResult });
-      },
-    );
-
-    socket.on("files:mkdir", async (dirPath: string) => {
+    socket.on('files:save', async ({ path: filePath, content, createBackup: shouldBackup }: SaveParams) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "files:mkdir-result",
-        await files.createDirectory(dirPath, ctx.containerName),
-      );
+      let backupResult = null;
+      if (shouldBackup) {
+        backupResult = await files.createBackup(filePath, ctx.containerName);
+      }
+      const result = await files.writeContent(filePath, content, ctx.containerName);
+      socket.emit('files:save-result', { ...result, backup: backupResult });
     });
 
-    socket.on("files:delete", async (itemPath: string) => {
+    socket.on('files:mkdir', async (dirPath: string) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "files:delete-result",
-        await files.deleteItem(itemPath, ctx.containerName),
-      );
+      socket.emit('files:mkdir-result', await files.createDirectory(dirPath, ctx.containerName));
     });
 
-    socket.on("files:rename", async ({ oldPath, newPath }: RenameParams) => {
+    socket.on('files:delete', async (itemPath: string) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "files:rename-result",
-        await files.renameItem(oldPath, newPath, ctx.containerName),
-      );
+      socket.emit('files:delete-result', await files.deleteItem(itemPath, ctx.containerName));
     });
 
-    socket.on("mods:list", async () => {
+    socket.on('files:rename', async ({ oldPath, newPath }: RenameParams) => {
+      if (!ctx.containerName) return;
+      socket.emit('files:rename-result', await files.renameItem(oldPath, newPath, ctx.containerName));
+    });
+
+    socket.on('mods:list', async () => {
       if (!ctx.containerName) return;
       const result = await mods.listInstalledMods(ctx.containerName);
 
@@ -388,44 +334,39 @@ export function setupSocketHandlers(io: Server): void {
           const enrichPromises = localMods.map(async (mod) => {
             try {
               const searchTerm = mod.fileName
-                .replace(/\.(jar|zip|disabled)$/gi, "")
-                .replace(/-[\d.]+.*$/, "")
-                .replace(/[-_]/g, " ");
+                .replace(/\.(jar|zip|disabled)$/gi, '')
+                .replace(/-[\d.]+.*$/, '')
+                .replace(/[-_]/g, ' ');
 
               if (!searchTerm || searchTerm.length < 2) return;
 
               const searchResult = await modtale.searchProjects({
                 query: searchTerm,
-                pageSize: 5,
+                pageSize: 5
               });
-              if (!searchResult.success || !searchResult.projects.length)
-                return;
+              if (!searchResult.success || !searchResult.projects.length) return;
 
               const match = searchResult.projects.find(
                 (p) =>
                   p.title.toLowerCase() === searchTerm.toLowerCase() ||
-                  p.title.toLowerCase().includes(searchTerm.toLowerCase()),
+                  p.title.toLowerCase().includes(searchTerm.toLowerCase())
               );
 
               if (match) {
                 const updates: Partial<mods.InstalledMod> = {
-                  providerId: "modtale",
+                  providerId: 'modtale',
                   projectId: match.id,
                   projectSlug: match.slug,
                   projectTitle: match.title,
                   projectIconUrl: match.iconUrl,
                   classification: match.classification,
-                  isLocal: false,
+                  isLocal: false
                 };
 
-                const versionMatch = mod.fileName.match(
-                  /-(\d+\.\d+(?:\.\d+)?)/,
-                );
+                const versionMatch = mod.fileName.match(/-(\d+\.\d+(?:\.\d+)?)/);
                 if (versionMatch) {
                   const fileVersion = versionMatch[1];
-                  const matchingVersion = match.versions?.find(
-                    (v) => v.version === fileVersion,
-                  );
+                  const matchingVersion = match.versions?.find((v) => v.version === fileVersion);
                   if (matchingVersion) {
                     updates.versionId = matchingVersion.id;
                     updates.versionName = matchingVersion.version;
@@ -438,10 +379,7 @@ export function setupSocketHandlers(io: Server): void {
                 await mods.updateMod(mod.id, updates, ctx.containerName!);
               }
             } catch (e) {
-              console.error(
-                `[Mods] Error enriching mod ${mod.fileName}:`,
-                (e as Error).message,
-              );
+              console.error(`[Mods] Error enriching mod ${mod.fileName}:`, (e as Error).message);
             }
           });
 
@@ -449,184 +387,160 @@ export function setupSocketHandlers(io: Server): void {
         }
       }
 
-      socket.emit("mods:list-result", result);
+      socket.emit('mods:list-result', result);
     });
 
-    socket.on("mods:search", async (params: modtale.SearchParams) => {
-      socket.emit("mods:search-result", await modtale.searchProjects(params));
+    socket.on('mods:search', async (params: modtale.SearchParams) => {
+      socket.emit('mods:search-result', await modtale.searchProjects(params));
     });
 
-    socket.on("mods:get", async (projectId: string) => {
-      socket.emit("mods:get-result", await modtale.getProject(projectId));
+    socket.on('mods:get', async (projectId: string) => {
+      socket.emit('mods:get-result', await modtale.getProject(projectId));
     });
 
-    socket.on(
-      "mods:install",
-      async ({ projectId, versionId, metadata }: InstallParams) => {
-        if (!ctx.containerName) return;
-        socket.emit("mods:install-status", {
-          status: "downloading",
-          projectId,
+    socket.on('mods:install', async ({ projectId, versionId, metadata }: InstallParams) => {
+      if (!ctx.containerName) return;
+      socket.emit('mods:install-status', {
+        status: 'downloading',
+        projectId
+      });
+
+      const downloadResult = await modtale.downloadVersion(projectId, metadata.versionName);
+      if (!downloadResult.success || !downloadResult.buffer) {
+        socket.emit('mods:install-result', {
+          success: false,
+          error: downloadResult.error
         });
+        return;
+      }
 
-        const downloadResult = await modtale.downloadVersion(
+      socket.emit('mods:install-status', { status: 'installing', projectId });
+
+      let fileName = downloadResult.fileName || metadata.fileName;
+      if (!fileName) {
+        const ext = metadata.classification === 'MODPACK' ? 'zip' : 'jar';
+        fileName = `${metadata.projectTitle.replace(/[^a-zA-Z0-9]/g, '-')}-${metadata.versionName}.${ext}`;
+      }
+
+      const installResult = await mods.installMod(
+        downloadResult.buffer,
+        {
+          ...metadata,
           projectId,
-          metadata.versionName,
-        );
-        if (!downloadResult.success || !downloadResult.buffer) {
-          socket.emit("mods:install-result", {
-            success: false,
-            error: downloadResult.error,
-          });
-          return;
-        }
-
-        socket.emit("mods:install-status", { status: "installing", projectId });
-
-        let fileName = downloadResult.fileName || metadata.fileName;
-        if (!fileName) {
-          const ext = metadata.classification === "MODPACK" ? "zip" : "jar";
-          fileName = `${metadata.projectTitle.replace(/[^a-zA-Z0-9]/g, "-")}-${metadata.versionName}.${ext}`;
-        }
-
-        const installResult = await mods.installMod(
-          downloadResult.buffer,
-          {
-            ...metadata,
-            projectId,
-            versionId,
-            fileName,
-          },
-          ctx.containerName,
-        );
-
-        socket.emit("mods:install-result", installResult);
-      },
-    );
-
-    socket.on("mods:uninstall", async (modId: string) => {
-      if (!ctx.containerName) return;
-      socket.emit(
-        "mods:uninstall-result",
-        await mods.uninstallMod(modId, ctx.containerName),
+          versionId,
+          fileName
+        },
+        ctx.containerName
       );
+
+      socket.emit('mods:install-result', installResult);
     });
 
-    socket.on("mods:enable", async (modId: string) => {
+    socket.on('mods:uninstall', async (modId: string) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "mods:enable-result",
-        await mods.enableMod(modId, ctx.containerName),
-      );
+      socket.emit('mods:uninstall-result', await mods.uninstallMod(modId, ctx.containerName));
     });
 
-    socket.on("mods:disable", async (modId: string) => {
+    socket.on('mods:enable', async (modId: string) => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "mods:disable-result",
-        await mods.disableMod(modId, ctx.containerName),
-      );
+      socket.emit('mods:enable-result', await mods.enableMod(modId, ctx.containerName));
     });
 
-    socket.on("mods:check-config", async () => {
+    socket.on('mods:disable', async (modId: string) => {
+      if (!ctx.containerName) return;
+      socket.emit('mods:disable-result', await mods.disableMod(modId, ctx.containerName));
+    });
+
+    socket.on('mods:check-config', async () => {
       const result = await modtale.verifyApiKey();
-      socket.emit("mods:config-status", result);
+      socket.emit('mods:config-status', result);
     });
 
-    socket.on("mods:classifications", async () => {
-      socket.emit(
-        "mods:classifications-result",
-        await modtale.getClassifications(),
-      );
+    socket.on('mods:classifications', async () => {
+      socket.emit('mods:classifications-result', await modtale.getClassifications());
     });
 
     // CurseForge handlers
-    socket.on("cf:check-config", async () => {
+    socket.on('cf:check-config', async () => {
       const result = await curseforge.verifyApiKey();
-      socket.emit("cf:config-status", result);
+      socket.emit('cf:config-status', result);
     });
 
-    socket.on("cf:search", async (params: curseforge.SearchParams) => {
-      socket.emit("cf:search-result", await curseforge.searchProjects(params));
+    socket.on('cf:search', async (params: curseforge.SearchParams) => {
+      socket.emit('cf:search-result', await curseforge.searchProjects(params));
     });
 
-    socket.on("cf:get", async (modId: string) => {
-      socket.emit("cf:get-result", await curseforge.getProject(modId));
+    socket.on('cf:get', async (modId: string) => {
+      socket.emit('cf:get-result', await curseforge.getProject(modId));
     });
 
-    socket.on("cf:categories", async () => {
-      socket.emit("cf:categories-result", await curseforge.getCategories());
+    socket.on('cf:categories', async () => {
+      socket.emit('cf:categories-result', await curseforge.getCategories());
     });
 
-    socket.on("cf:files", async (modId: string) => {
-      socket.emit("cf:files-result", await curseforge.getModFiles(modId));
+    socket.on('cf:files', async (modId: string) => {
+      socket.emit('cf:files-result', await curseforge.getModFiles(modId));
     });
 
-    socket.on(
-      "cf:install",
-      async ({ modId, fileId, metadata }: CFInstallParams) => {
-        if (!ctx.containerName) return;
-        socket.emit("cf:install-status", { status: "downloading", modId });
+    socket.on('cf:install', async ({ modId, fileId, metadata }: CFInstallParams) => {
+      if (!ctx.containerName) return;
+      socket.emit('cf:install-status', { status: 'downloading', modId });
 
-        const downloadResult = await curseforge.downloadVersion(modId, fileId);
-        if (!downloadResult.success || !downloadResult.buffer) {
-          socket.emit("cf:install-result", {
-            success: false,
-            error: downloadResult.error,
-          });
-          return;
-        }
+      const downloadResult = await curseforge.downloadVersion(modId, fileId);
+      if (!downloadResult.success || !downloadResult.buffer) {
+        socket.emit('cf:install-result', {
+          success: false,
+          error: downloadResult.error
+        });
+        return;
+      }
 
-        socket.emit("cf:install-status", { status: "installing", modId });
+      socket.emit('cf:install-status', { status: 'installing', modId });
 
-        let fileName = downloadResult.fileName || metadata.fileName;
-        if (!fileName) {
-          const ext = metadata.classification === "PACK" ? "zip" : "jar";
-          fileName = `${metadata.projectTitle.replace(/[^a-zA-Z0-9]/g, "-")}-${metadata.versionName}.${ext}`;
-        }
+      let fileName = downloadResult.fileName || metadata.fileName;
+      if (!fileName) {
+        const ext = metadata.classification === 'PACK' ? 'zip' : 'jar';
+        fileName = `${metadata.projectTitle.replace(/[^a-zA-Z0-9]/g, '-')}-${metadata.versionName}.${ext}`;
+      }
 
-        const installResult = await mods.installMod(
-          downloadResult.buffer,
-          {
-            providerId: "curseforge",
-            projectId: modId,
-            versionId: fileId,
-            versionName: metadata.versionName,
-            projectTitle: metadata.projectTitle,
-            classification: metadata.classification,
-            fileName,
-            projectIconUrl: metadata.projectIconUrl,
-            projectSlug: metadata.projectSlug,
-          },
-          ctx.containerName,
-        );
+      const installResult = await mods.installMod(
+        downloadResult.buffer,
+        {
+          providerId: 'curseforge',
+          projectId: modId,
+          versionId: fileId,
+          versionName: metadata.versionName,
+          projectTitle: metadata.projectTitle,
+          classification: metadata.classification,
+          fileName,
+          projectIconUrl: metadata.projectIconUrl,
+          projectSlug: metadata.projectSlug
+        },
+        ctx.containerName
+      );
 
-        socket.emit("cf:install-result", installResult);
-      },
-    );
+      socket.emit('cf:install-result', installResult);
+    });
 
     // Server update handlers
-    socket.on("update:check", async () => {
+    socket.on('update:check', async () => {
       if (!ctx.containerName) return;
-      socket.emit(
-        "update:check-result",
-        await updater.checkForUpdate(ctx.containerName),
-      );
+      socket.emit('update:check-result', await updater.checkForUpdate(ctx.containerName));
     });
 
-    socket.on("update:apply", async () => {
+    socket.on('update:apply', async () => {
       if (!ctx.containerName || !ctx.serverId) return;
       await updater.applyUpdate(socket, ctx.containerName, ctx.serverId);
     });
 
-    socket.on("mods:check-updates", async () => {
+    socket.on('mods:check-updates', async () => {
       if (!ctx.containerName) return;
       try {
         const listResult = await mods.listInstalledMods(ctx.containerName);
         if (!listResult.success) {
-          socket.emit("mods:check-updates-result", {
+          socket.emit('mods:check-updates-result', {
             success: false,
-            error: listResult.error,
+            error: listResult.error
           });
           return;
         }
@@ -644,18 +558,13 @@ export function setupSocketHandlers(io: Server): void {
 
         // Check Modtale mods if API is configured
         if (modtale.isConfigured()) {
-          const modtaleMods = listResult.mods.filter(
-            (m) => m.providerId === "modtale" && m.projectId,
-          );
+          const modtaleMods = listResult.mods.filter((m) => m.providerId === 'modtale' && m.projectId);
 
           const modtaleChecks = await Promise.all(
             modtaleMods.map(async (mod) => {
               try {
                 const projectResult = await modtale.getProject(mod.projectId!);
-                if (
-                  projectResult.success &&
-                  projectResult.project?.latestVersion
-                ) {
+                if (projectResult.success && projectResult.project?.latestVersion) {
                   const latest = projectResult.project.latestVersion;
                   if (latest.id && latest.id !== mod.versionId) {
                     return {
@@ -666,40 +575,28 @@ export function setupSocketHandlers(io: Server): void {
                       latestVersion: latest.version,
                       latestVersionId: latest.id,
                       latestFileName: latest.fileName,
-                      providerId: "modtale",
+                      providerId: 'modtale'
                     };
                   }
                 }
               } catch (e) {
-                console.error(
-                  `[Mods] Error checking Modtale updates for ${mod.projectTitle}:`,
-                  (e as Error).message,
-                );
+                console.error(`[Mods] Error checking Modtale updates for ${mod.projectTitle}:`, (e as Error).message);
               }
               return null;
-            }),
+            })
           );
-          allUpdates.push(
-            ...(modtaleChecks.filter(Boolean) as typeof allUpdates),
-          );
+          allUpdates.push(...(modtaleChecks.filter(Boolean) as typeof allUpdates));
         }
 
         // Check CurseForge mods if API is configured
         if (curseforge.isConfigured()) {
-          const cfMods = listResult.mods.filter(
-            (m) => m.providerId === "curseforge" && m.projectId,
-          );
+          const cfMods = listResult.mods.filter((m) => m.providerId === 'curseforge' && m.projectId);
 
           const cfChecks = await Promise.all(
             cfMods.map(async (mod) => {
               try {
-                const projectResult = await curseforge.getProject(
-                  mod.projectId!,
-                );
-                if (
-                  projectResult.success &&
-                  projectResult.project?.latestVersion
-                ) {
+                const projectResult = await curseforge.getProject(mod.projectId!);
+                if (projectResult.success && projectResult.project?.latestVersion) {
                   const latest = projectResult.project.latestVersion;
                   if (latest.id && latest.id !== mod.versionId) {
                     return {
@@ -710,132 +607,119 @@ export function setupSocketHandlers(io: Server): void {
                       latestVersion: latest.version,
                       latestVersionId: latest.id,
                       latestFileName: latest.fileName,
-                      providerId: "curseforge",
+                      providerId: 'curseforge'
                     };
                   }
                 }
               } catch (e) {
                 console.error(
                   `[Mods] Error checking CurseForge updates for ${mod.projectTitle}:`,
-                  (e as Error).message,
+                  (e as Error).message
                 );
               }
               return null;
-            }),
+            })
           );
           allUpdates.push(...(cfChecks.filter(Boolean) as typeof allUpdates));
         }
 
-        socket.emit("mods:check-updates-result", {
+        socket.emit('mods:check-updates-result', {
           success: true,
-          updates: allUpdates,
+          updates: allUpdates
         });
       } catch (e) {
-        socket.emit("mods:check-updates-result", {
+        socket.emit('mods:check-updates-result', {
           success: false,
-          error: (e as Error).message,
+          error: (e as Error).message
         });
       }
     });
 
-    socket.on(
-      "mods:update",
-      async ({ modId, versionId, metadata }: UpdateParams) => {
-        if (!ctx.containerName) return;
-        console.log(
-          `[Mods] Update request: modId=${modId}, versionId=${versionId}`,
-        );
+    socket.on('mods:update', async ({ modId, versionId, metadata }: UpdateParams) => {
+      if (!ctx.containerName) return;
+      console.log(`[Mods] Update request: modId=${modId}, versionId=${versionId}`);
 
-        const modResult = await mods.getMod(modId, ctx.containerName);
-        if (!modResult.success || !modResult.mod) {
-          socket.emit("mods:update-result", {
-            success: false,
-            error: "Mod not found",
-          });
-          return;
-        }
+      const modResult = await mods.getMod(modId, ctx.containerName);
+      if (!modResult.success || !modResult.mod) {
+        socket.emit('mods:update-result', {
+          success: false,
+          error: 'Mod not found'
+        });
+        return;
+      }
 
-        const mod = modResult.mod;
-        socket.emit("mods:update-status", { status: "downloading", modId });
+      const mod = modResult.mod;
+      socket.emit('mods:update-status', { status: 'downloading', modId });
 
-        let downloadResult: {
-          success: boolean;
-          buffer?: Buffer;
-          fileName?: string | null;
-          error?: string;
-        };
+      let downloadResult: {
+        success: boolean;
+        buffer?: Buffer;
+        fileName?: string | null;
+        error?: string;
+      };
 
-        if (mod.providerId === "curseforge") {
-          downloadResult = await curseforge.downloadVersion(
-            mod.projectId!,
-            versionId,
-          );
-        } else {
-          downloadResult = await modtale.downloadVersion(
-            mod.projectId!,
-            metadata.versionName,
-          );
-        }
+      if (mod.providerId === 'curseforge') {
+        downloadResult = await curseforge.downloadVersion(mod.projectId!, versionId);
+      } else {
+        downloadResult = await modtale.downloadVersion(mod.projectId!, metadata.versionName);
+      }
 
-        if (!downloadResult.success || !downloadResult.buffer) {
-          socket.emit("mods:update-result", {
-            success: false,
-            error: downloadResult.error,
-          });
-          return;
-        }
+      if (!downloadResult.success || !downloadResult.buffer) {
+        socket.emit('mods:update-result', {
+          success: false,
+          error: downloadResult.error
+        });
+        return;
+      }
 
-        socket.emit("mods:update-status", { status: "installing", modId });
+      socket.emit('mods:update-status', { status: 'installing', modId });
 
-        const installResult = await mods.installMod(
-          downloadResult.buffer,
-          {
-            providerId: mod.providerId,
-            projectId: mod.projectId || undefined,
-            projectSlug: mod.projectSlug,
-            projectTitle: mod.projectTitle,
-            projectIconUrl: mod.projectIconUrl,
-            versionId: versionId,
-            versionName: metadata.versionName,
-            classification: mod.classification,
-            fileName: downloadResult.fileName || metadata.fileName,
-          },
-          ctx.containerName,
-        );
+      const installResult = await mods.installMod(
+        downloadResult.buffer,
+        {
+          providerId: mod.providerId,
+          projectId: mod.projectId || undefined,
+          projectSlug: mod.projectSlug,
+          projectTitle: mod.projectTitle,
+          projectIconUrl: mod.projectIconUrl,
+          versionId: versionId,
+          versionName: metadata.versionName,
+          classification: mod.classification,
+          fileName: downloadResult.fileName || metadata.fileName
+        },
+        ctx.containerName
+      );
 
-        if (installResult.success) {
-          socket.emit("mods:update-result", {
-            success: true,
-            mod: installResult.mod,
-          });
-        } else {
-          socket.emit("mods:update-result", {
-            success: false,
-            error: installResult.error,
-          });
-        }
-      },
-    );
+      if (installResult.success) {
+        socket.emit('mods:update-result', {
+          success: true,
+          mod: installResult.mod
+        });
+      } else {
+        socket.emit('mods:update-result', {
+          success: false,
+          error: installResult.error
+        });
+      }
+    });
 
     // Status interval - only when joined to a server
     const statusInterval = setInterval(async () => {
       if (ctx.containerName) {
-        socket.emit("status", await docker.getStatus(ctx.containerName));
+        socket.emit('status', await docker.getStatus(ctx.containerName));
       }
     }, 5000);
 
-    socket.on("disconnect", () => {
+    socket.on('disconnect', () => {
       clearInterval(statusInterval);
       if (logStream) {
         try {
-          (
-            logStream as NodeJS.ReadableStream & { destroy?: () => void }
-          ).destroy?.();
+          (logStream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
         } catch {
           /* ignore */
         }
       }
-      console.log("Client disconnected");
+      console.log('Client disconnected');
     });
   });
 }
